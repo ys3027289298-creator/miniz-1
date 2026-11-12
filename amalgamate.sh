@@ -52,6 +52,7 @@ examples/example3.c
 examples/example4.c
 examples/example5.c
 examples/example6.c
+examples/example7.c
 EOF
 cd ..
 

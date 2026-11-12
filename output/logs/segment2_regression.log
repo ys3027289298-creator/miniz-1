@@ -1,0 +1,24 @@
+/tmp/miniz_gzip_demo/base/tests/miniz_tester.cpp: In function ‘bool zip_create(const char*, const char*)’:
+/tmp/miniz_gzip_demo/base/tests/miniz_tester.cpp:921:10: warning: format ‘%llu’ expects argument of type ‘long long unsigned int’, but argument 3 has type ‘mz_uint64’ {aka ‘long unsigned int’} [-Wformat=]
+  921 |   printf("Created zip file \"%s\", file size: " QUAD_INT_FMT "\n", pZip_filename, zip.m_archive_size);
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                 ~~~~~~~~~~~~~~~~~~
+      |                                                                                       |
+      |                                                                                       mz_uint64 {aka long unsigned int}
+/tmp/miniz_gzip_demo/base/tests/miniz_tester.cpp:64:26: note: format string is defined here
+   64 | #define QUAD_INT_FMT "%llu"
+      |                       ~~~^
+      |                          |
+      |                          long long unsigned int
+      |                       %lu
+example1 标准输出: 完全一致
+example2 标准输出: 完全一致
+example3 标准输出: 完全一致
+example4 标准输出: 完全一致
+example5 标准输出: 完全一致
+example6 标准输出: 完全一致
+members=51
+example2 生成的 zip 归档: 成员元数据与内容完全一致 (忽略 DOS 时间戳)
+example6 生成的 PNG: 逐字节一致
+example3 zlib 压缩流: 逐字节一致
+miniz_tester 归档模式确定性输出: 完全一致
+== 旧接口零回归: 通过 ==

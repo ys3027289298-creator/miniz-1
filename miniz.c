@@ -193,18 +193,44 @@ mz_ulong mz_crc32(mz_ulong crc, const mz_uint8 *ptr, size_t buf_len)
         return mz_deflateInit2(pStream, level, MZ_DEFLATED, MZ_DEFAULT_WINDOW_BITS, 9, MZ_DEFAULT_STRATEGY);
     }
 
+    /* gzip (RFC 1952) container state. m_comp must remain the first member so the existing */
+    /* mz_deflate*() code can keep casting pStream->state to tdefl_compressor*. */
+    typedef struct
+    {
+        tdefl_compressor m_comp;
+        mz_uint m_gzip;             /* nonzero when wrapping the raw deflate stream in the gzip container */
+        mz_uint m_gzip_stage;       /* 0 = header pending, 1 = deflating payload, 2 = trailer pending */
+        mz_uint m_gzip_hdr_ofs;     /* bytes of the 10-byte header emitted so far */
+        mz_uint m_gzip_trailer_ofs; /* bytes of the 8-byte trailer emitted so far */
+        mz_uint8 m_gzip_header[10];
+        mz_uint8 m_gzip_trailer[8];
+        mz_ulong m_gzip_crc; /* CRC-32 of all uncompressed bytes consumed so far */
+    } deflate_gzip_state;
+
+    static void mz_deflate_gzip_reset(deflate_gzip_state *pState)
+    {
+        pState->m_gzip_stage = 0;
+        pState->m_gzip_hdr_ofs = 0;
+        pState->m_gzip_trailer_ofs = 0;
+        pState->m_gzip_crc = MZ_CRC32_INIT;
+    }
+
     int mz_deflateInit2(mz_streamp pStream, int level, int method, int window_bits, int mem_level, int strategy)
     {
-        tdefl_compressor *pComp;
-        mz_uint comp_flags = TDEFL_COMPUTE_ADLER32 | tdefl_create_comp_flags_from_zip_params(level, window_bits, strategy);
+        deflate_gzip_state *pComp;
+        mz_uint comp_flags;
+        mz_bool gzip = (window_bits == (MZ_DEFAULT_WINDOW_BITS + 16));
 
         if (!pStream)
             return MZ_STREAM_ERROR;
-        if ((method != MZ_DEFLATED) || ((mem_level < 1) || (mem_level > 9)) || ((window_bits != MZ_DEFAULT_WINDOW_BITS) && (-window_bits != MZ_DEFAULT_WINDOW_BITS)))
+        if ((method != MZ_DEFLATED) || ((mem_level < 1) || (mem_level > 9)) || ((window_bits != MZ_DEFAULT_WINDOW_BITS) && (-window_bits != MZ_DEFAULT_WINDOW_BITS) && (!gzip)))
             return MZ_PARAM_ERROR;
 
+        /* The gzip container wraps a raw deflate stream, so the compressor itself always sees raw window bits. */
+        comp_flags = TDEFL_COMPUTE_ADLER32 | tdefl_create_comp_flags_from_zip_params(level, gzip ? -MZ_DEFAULT_WINDOW_BITS : window_bits, strategy);
+
         pStream->data_type = 0;
-        pStream->adler = MZ_ADLER32_INIT;
+        pStream->adler = gzip ? MZ_CRC32_INIT : MZ_ADLER32_INIT;
         pStream->msg = NULL;
         pStream->reserved = 0;
         pStream->total_in = 0;
@@ -214,17 +240,31 @@ mz_ulong mz_crc32(mz_ulong crc, const mz_uint8 *ptr, size_t buf_len)
         if (!pStream->zfree)
             pStream->zfree = miniz_def_free_func;
 
-        pComp = (tdefl_compressor *)pStream->zalloc(pStream->opaque, 1, sizeof(tdefl_compressor));
+        pComp = (deflate_gzip_state *)pStream->zalloc(pStream->opaque, 1, sizeof(deflate_gzip_state));
         if (!pComp)
             return MZ_MEM_ERROR;
 
         pStream->state = (struct mz_internal_state *)pComp;
 
-        if (tdefl_init(pComp, NULL, NULL, comp_flags) != TDEFL_STATUS_OKAY)
+        if (tdefl_init(&pComp->m_comp, NULL, NULL, comp_flags) != TDEFL_STATUS_OKAY)
         {
             mz_deflateEnd(pStream);
             return MZ_PARAM_ERROR;
         }
+
+        pComp->m_gzip = gzip;
+        if (gzip)
+        {
+            /* RFC 1952 header: magic, CM=deflate, no flags, zero MTIME, XFL from the level, OS=unknown. */
+            pComp->m_gzip_header[0] = 0x1F;
+            pComp->m_gzip_header[1] = 0x8B;
+            pComp->m_gzip_header[2] = MZ_DEFLATED;
+            pComp->m_gzip_header[3] = 0;
+            pComp->m_gzip_header[4] = pComp->m_gzip_header[5] = pComp->m_gzip_header[6] = pComp->m_gzip_header[7] = 0;
+            pComp->m_gzip_header[8] = (level >= MZ_BEST_COMPRESSION) ? 2 : ((level <= MZ_BEST_SPEED) ? 4 : 0);
+            pComp->m_gzip_header[9] = 255;
+        }
+        mz_deflate_gzip_reset(pComp);
 
         return MZ_OK;
     }
@@ -235,10 +275,11 @@ mz_ulong mz_crc32(mz_ulong crc, const mz_uint8 *ptr, size_t buf_len)
             return MZ_STREAM_ERROR;
         pStream->total_in = pStream->total_out = 0;
         tdefl_init((tdefl_compressor *)pStream->state, NULL, NULL, ((tdefl_compressor *)pStream->state)->m_flags);
+        mz_deflate_gzip_reset((deflate_gzip_state *)pStream->state);
         return MZ_OK;
     }
 
-    int mz_deflate(mz_streamp pStream, int flush)
+    static int mz_deflate_core(mz_streamp pStream, int flush)
     {
         size_t in_bytes, out_bytes;
         mz_ulong orig_total_in, orig_total_out;
@@ -294,6 +335,74 @@ mz_ulong mz_crc32(mz_ulong crc, const mz_uint8 *ptr, size_t buf_len)
             }
         }
         return mz_status;
+    }
+
+    int mz_deflate(mz_streamp pStream, int flush)
+    {
+        deflate_gzip_state *pState;
+        mz_uint n;
+        mz_ulong orig_total_in;
+        mz_uint32 trailer_word;
+        int status;
+
+        if ((!pStream) || (!pStream->state))
+            return MZ_STREAM_ERROR;
+
+        pState = (deflate_gzip_state *)pStream->state;
+        if (!pState->m_gzip)
+            return mz_deflate_core(pStream, flush);
+
+        if ((flush < 0) || (flush > MZ_FINISH) || (!pStream->next_out))
+            return MZ_STREAM_ERROR;
+
+        /* Emit the 10-byte gzip header before any deflate payload. */
+        if (pState->m_gzip_stage == 0)
+        {
+            n = MZ_MIN((mz_uint)sizeof(pState->m_gzip_header) - pState->m_gzip_hdr_ofs, pStream->avail_out);
+            memcpy(pStream->next_out, pState->m_gzip_header + pState->m_gzip_hdr_ofs, n);
+            pStream->next_out += n;
+            pStream->avail_out -= n;
+            pStream->total_out += n;
+            pState->m_gzip_hdr_ofs += n;
+            if (pState->m_gzip_hdr_ofs < (mz_uint)sizeof(pState->m_gzip_header))
+                return n ? MZ_OK : MZ_BUF_ERROR;
+            pState->m_gzip_stage = 1;
+        }
+
+        if (pState->m_gzip_stage == 1)
+        {
+            orig_total_in = pStream->total_in;
+            status = mz_deflate_core(pStream, flush);
+            if (pStream->total_in != orig_total_in)
+                pState->m_gzip_crc = mz_crc32(pState->m_gzip_crc, pStream->next_in - (pStream->total_in - orig_total_in), (size_t)(pStream->total_in - orig_total_in));
+            pStream->adler = pState->m_gzip_crc;
+            if (status != MZ_STREAM_END)
+                return status;
+
+            /* RFC 1952 trailer: CRC-32 and ISIZE (uncompressed size mod 2^32), both little-endian. */
+            trailer_word = (mz_uint32)(pState->m_gzip_crc & 0xFFFFFFFFU);
+            pState->m_gzip_trailer[0] = (mz_uint8)(trailer_word & 0xFF);
+            pState->m_gzip_trailer[1] = (mz_uint8)((trailer_word >> 8) & 0xFF);
+            pState->m_gzip_trailer[2] = (mz_uint8)((trailer_word >> 16) & 0xFF);
+            pState->m_gzip_trailer[3] = (mz_uint8)((trailer_word >> 24) & 0xFF);
+            trailer_word = (mz_uint32)(pStream->total_in & 0xFFFFFFFFU);
+            pState->m_gzip_trailer[4] = (mz_uint8)(trailer_word & 0xFF);
+            pState->m_gzip_trailer[5] = (mz_uint8)((trailer_word >> 8) & 0xFF);
+            pState->m_gzip_trailer[6] = (mz_uint8)((trailer_word >> 16) & 0xFF);
+            pState->m_gzip_trailer[7] = (mz_uint8)((trailer_word >> 24) & 0xFF);
+            pState->m_gzip_stage = 2;
+        }
+
+        n = MZ_MIN((mz_uint)sizeof(pState->m_gzip_trailer) - pState->m_gzip_trailer_ofs, pStream->avail_out);
+        memcpy(pStream->next_out, pState->m_gzip_trailer + pState->m_gzip_trailer_ofs, n);
+        pStream->next_out += n;
+        pStream->avail_out -= n;
+        pStream->total_out += n;
+        pState->m_gzip_trailer_ofs += n;
+        if (pState->m_gzip_trailer_ofs < (mz_uint)sizeof(pState->m_gzip_trailer))
+            return n ? MZ_OK : MZ_BUF_ERROR;
+
+        return MZ_STREAM_END;
     }
 
     int mz_deflateEnd(mz_streamp pStream)
@@ -366,14 +475,37 @@ mz_ulong mz_crc32(mz_ulong crc, const mz_uint8 *ptr, size_t buf_len)
         int m_window_bits;
         mz_uint8 m_dict[TINFL_LZ_DICT_SIZE];
         tinfl_status m_last_status;
+        /* gzip (RFC 1952) container state, only used when m_gzip is nonzero. */
+        mz_uint m_gzip;           /* nonzero when parsing the gzip container format */
+        mz_uint m_gzip_stage;     /* 0 = header, 1 = deflate payload, 2 = trailer */
+        mz_uint m_gzip_opt;       /* optional header field sub-state */
+        mz_uint m_gzip_flags;     /* FLG byte; optional-field bits are cleared as the fields are consumed */
+        mz_uint m_gzip_hdr_len;   /* byte counter used while parsing header fields */
+        mz_uint m_gzip_xlen;      /* remaining FEXTRA bytes to skip */
+        mz_uint8 m_gzip_header[10];
+        mz_uint8 m_gzip_trailer[8];
+        mz_uint m_gzip_trailer_len;
+        mz_ulong m_gzip_crc; /* CRC-32 of all decompressed bytes */
     } inflate_state;
+
+    static void mz_inflate_gzip_reset(inflate_state *pState)
+    {
+        pState->m_gzip_stage = 0;
+        pState->m_gzip_opt = 0;
+        pState->m_gzip_flags = 0;
+        pState->m_gzip_hdr_len = 0;
+        pState->m_gzip_xlen = 0;
+        pState->m_gzip_trailer_len = 0;
+        pState->m_gzip_crc = MZ_CRC32_INIT;
+    }
 
     int mz_inflateInit2(mz_streamp pStream, int window_bits)
     {
         inflate_state *pDecomp;
+        mz_bool gzip = (window_bits == (MZ_DEFAULT_WINDOW_BITS + 16));
         if (!pStream)
             return MZ_STREAM_ERROR;
-        if ((window_bits != MZ_DEFAULT_WINDOW_BITS) && (-window_bits != MZ_DEFAULT_WINDOW_BITS))
+        if ((window_bits != MZ_DEFAULT_WINDOW_BITS) && (-window_bits != MZ_DEFAULT_WINDOW_BITS) && (!gzip))
             return MZ_PARAM_ERROR;
 
         pStream->data_type = 0;
@@ -399,7 +531,10 @@ mz_ulong mz_crc32(mz_ulong crc, const mz_uint8 *ptr, size_t buf_len)
         pDecomp->m_last_status = TINFL_STATUS_NEEDS_MORE_INPUT;
         pDecomp->m_first_call = 1;
         pDecomp->m_has_flushed = 0;
-        pDecomp->m_window_bits = window_bits;
+        /* The gzip container wraps a raw deflate stream, so the decompressor itself always sees raw window bits. */
+        pDecomp->m_window_bits = gzip ? -MZ_DEFAULT_WINDOW_BITS : window_bits;
+        pDecomp->m_gzip = gzip;
+        mz_inflate_gzip_reset(pDecomp);
 
         return MZ_OK;
     }
@@ -431,11 +566,132 @@ mz_ulong mz_crc32(mz_ulong crc, const mz_uint8 *ptr, size_t buf_len)
         pDecomp->m_first_call = 1;
         pDecomp->m_has_flushed = 0;
         /* pDecomp->m_window_bits = window_bits */;
+        mz_inflate_gzip_reset(pDecomp);
 
         return MZ_OK;
     }
 
-    int mz_inflate(mz_streamp pStream, int flush)
+    /* Incrementally parses a gzip (RFC 1952) header from pStream's input. Returns 1 once the header */
+    /* has been fully consumed, 0 when more input is needed, or -1 when the header is invalid. */
+    static int mz_inflate_gzip_parse_header(mz_streamp pStream, inflate_state *pState)
+    {
+        mz_uint n;
+        mz_uint8 c;
+        mz_bool found;
+
+        for (;;)
+        {
+            if (pState->m_gzip_opt == 0)
+            {
+                /* Fixed 10-byte header: magic, CM, FLG, MTIME, XFL, OS. */
+                while ((pState->m_gzip_hdr_len < 10) && (pStream->avail_in))
+                {
+                    pState->m_gzip_header[pState->m_gzip_hdr_len++] = *pStream->next_in++;
+                    pStream->avail_in--;
+                    pStream->total_in++;
+                }
+                if (pState->m_gzip_hdr_len < 10)
+                    return 0;
+                if ((pState->m_gzip_header[0] != 0x1F) || (pState->m_gzip_header[1] != 0x8B) || (pState->m_gzip_header[2] != MZ_DEFLATED))
+                    return -1;
+                if (pState->m_gzip_header[3] & 0xE0) /* reserved FLG bits must be zero */
+                    return -1;
+                pState->m_gzip_flags = pState->m_gzip_header[3];
+                pState->m_gzip_opt = 1;
+            }
+            if (pState->m_gzip_opt == 1)
+            {
+                /* Decide which optional field comes next (FEXTRA, FNAME, FCOMMENT, FHCRC, in that order). */
+                if (pState->m_gzip_flags & 4)
+                {
+                    pState->m_gzip_flags &= ~4;
+                    pState->m_gzip_opt = 2;
+                    pState->m_gzip_hdr_len = 0;
+                    pState->m_gzip_xlen = 0;
+                }
+                else if (pState->m_gzip_flags & 8)
+                {
+                    pState->m_gzip_flags &= ~8;
+                    pState->m_gzip_opt = 4;
+                }
+                else if (pState->m_gzip_flags & 16)
+                {
+                    pState->m_gzip_flags &= ~16;
+                    pState->m_gzip_opt = 5;
+                }
+                else if (pState->m_gzip_flags & 2)
+                {
+                    pState->m_gzip_flags &= ~2;
+                    pState->m_gzip_opt = 6;
+                    pState->m_gzip_hdr_len = 0;
+                }
+                else
+                    return 1; /* header complete */
+            }
+            if (pState->m_gzip_opt == 2)
+            {
+                /* FEXTRA: read the 2-byte little-endian field length. */
+                while ((pState->m_gzip_hdr_len < 2) && (pStream->avail_in))
+                {
+                    c = *pStream->next_in++;
+                    pStream->avail_in--;
+                    pStream->total_in++;
+                    pState->m_gzip_xlen |= (mz_uint)c << (pState->m_gzip_hdr_len * 8);
+                    pState->m_gzip_hdr_len++;
+                }
+                if (pState->m_gzip_hdr_len < 2)
+                    return 0;
+                pState->m_gzip_opt = 3;
+            }
+            if (pState->m_gzip_opt == 3)
+            {
+                /* FEXTRA: skip the field payload. */
+                n = MZ_MIN(pState->m_gzip_xlen, pStream->avail_in);
+                pStream->next_in += n;
+                pStream->avail_in -= n;
+                pStream->total_in += n;
+                pState->m_gzip_xlen -= n;
+                if (pState->m_gzip_xlen)
+                    return 0;
+                pState->m_gzip_opt = 1;
+            }
+            else if ((pState->m_gzip_opt == 4) || (pState->m_gzip_opt == 5))
+            {
+                /* FNAME/FCOMMENT: skip a zero-terminated string. */
+                found = MZ_FALSE;
+                while (pStream->avail_in)
+                {
+                    c = *pStream->next_in++;
+                    pStream->avail_in--;
+                    pStream->total_in++;
+                    if (!c)
+                    {
+                        found = MZ_TRUE;
+                        break;
+                    }
+                }
+                if (!found)
+                    return 0;
+                pState->m_gzip_opt = 1;
+            }
+            else if (pState->m_gzip_opt == 6)
+            {
+                /* FHCRC: skip the 2-byte header CRC. */
+                while ((pState->m_gzip_hdr_len < 2) && (pStream->avail_in))
+                {
+                    pStream->next_in++;
+                    pStream->avail_in--;
+                    pStream->total_in++;
+                    pState->m_gzip_hdr_len++;
+                }
+                if (pState->m_gzip_hdr_len < 2)
+                    return 0;
+                pState->m_gzip_opt = 1;
+            }
+        }
+    }
+
+    static int mz_inflate_core(mz_streamp pStream, int flush)
     {
         inflate_state *pState;
         mz_uint n, first_call, decomp_flags = TINFL_FLAG_COMPUTE_ADLER32;
@@ -545,6 +801,74 @@ mz_ulong mz_crc32(mz_ulong crc, const mz_uint8 *ptr, size_t buf_len)
         }
 
         return ((status == TINFL_STATUS_DONE) && (!pState->m_dict_avail)) ? MZ_STREAM_END : MZ_OK;
+    }
+
+    int mz_inflate(mz_streamp pStream, int flush)
+    {
+        inflate_state *pState;
+        const mz_uint8 *pNext_out_before;
+        mz_uint32 trailer_crc, trailer_isize;
+        int status;
+
+        if ((!pStream) || (!pStream->state))
+            return MZ_STREAM_ERROR;
+
+        pState = (inflate_state *)pStream->state;
+        if (!pState->m_gzip)
+            return mz_inflate_core(pStream, flush);
+
+        if (pState->m_last_status < 0)
+            return MZ_DATA_ERROR;
+
+        if (flush == MZ_PARTIAL_FLUSH)
+            flush = MZ_SYNC_FLUSH;
+        if ((flush) && (flush != MZ_SYNC_FLUSH) && (flush != MZ_FINISH))
+            return MZ_STREAM_ERROR;
+
+        if (pState->m_gzip_stage == 0)
+        {
+            status = mz_inflate_gzip_parse_header(pStream, pState);
+            if (status < 0)
+            {
+                pState->m_last_status = TINFL_STATUS_FAILED;
+                return MZ_DATA_ERROR;
+            }
+            if (!status)
+                return MZ_BUF_ERROR; /* need more input to finish the header */
+            pState->m_gzip_stage = 1;
+        }
+
+        if (pState->m_gzip_stage == 1)
+        {
+            pNext_out_before = pStream->next_out;
+            status = mz_inflate_core(pStream, flush);
+            if (pStream->next_out != pNext_out_before)
+                pState->m_gzip_crc = mz_crc32(pState->m_gzip_crc, pNext_out_before, (size_t)(pStream->next_out - pNext_out_before));
+            pStream->adler = pState->m_gzip_crc;
+            if (status != MZ_STREAM_END)
+                return status;
+            pState->m_gzip_stage = 2;
+        }
+
+        /* Consume the 8-byte trailer (CRC-32 and ISIZE, both little-endian) and verify it. */
+        while ((pState->m_gzip_trailer_len < (mz_uint)sizeof(pState->m_gzip_trailer)) && (pStream->avail_in))
+        {
+            pState->m_gzip_trailer[pState->m_gzip_trailer_len++] = *pStream->next_in++;
+            pStream->avail_in--;
+            pStream->total_in++;
+        }
+        if (pState->m_gzip_trailer_len < (mz_uint)sizeof(pState->m_gzip_trailer))
+            return MZ_BUF_ERROR; /* truncated gzip trailer */
+
+        trailer_crc = (mz_uint32)pState->m_gzip_trailer[0] | ((mz_uint32)pState->m_gzip_trailer[1] << 8) | ((mz_uint32)pState->m_gzip_trailer[2] << 16) | ((mz_uint32)pState->m_gzip_trailer[3] << 24);
+        trailer_isize = (mz_uint32)pState->m_gzip_trailer[4] | ((mz_uint32)pState->m_gzip_trailer[5] << 8) | ((mz_uint32)pState->m_gzip_trailer[6] << 16) | ((mz_uint32)pState->m_gzip_trailer[7] << 24);
+        if (((mz_uint32)pState->m_gzip_crc != trailer_crc) || ((mz_uint32)pStream->total_out != trailer_isize))
+        {
+            pState->m_last_status = TINFL_STATUS_FAILED;
+            return MZ_DATA_ERROR;
+        }
+
+        return MZ_STREAM_END;
     }
 
     int mz_inflateEnd(mz_streamp pStream)

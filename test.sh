@@ -11,7 +11,7 @@ cat << "EOF" > miniz_export.h
 EOF
 g++ tests/miniz_tester.cpp tests/timer.cpp amalgamation/miniz.c -o miniz_tester -I. -ggdb -O2
 
-for i in 1 2 3 4 5 6
+for i in 1 2 3 4 5 6 7
 do
     gcc examples/example$i.c amalgamation/miniz.c -o example$i -lm -I. -ggdb
 done

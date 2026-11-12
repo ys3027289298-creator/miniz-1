@@ -1,0 +1,24 @@
++ /tmp/miniz_gzip_demo/example7
+miniz.c version: 11.3.2
+Running gzip container self-test...
+  round trip OK: 32768 bytes -> 227 byte gzip stream -> 32768 bytes (in chunks of 7/13)
+  round trip OK: 32768 bytes -> 227 byte gzip stream -> 32768 bytes (in chunks of 32768/32768)
+  round trip OK: 0 bytes -> 20 byte gzip stream -> 0 bytes (in chunks of 7/13)
+  corruption detected OK (deflate payload bit flip): mz_inflate() returned MZ_DATA_ERROR
+  corruption detected OK (CRC-32 trailer bit flip): mz_inflate() returned MZ_DATA_ERROR
+  corruption detected OK (header magic bit flip): mz_inflate() returned MZ_DATA_ERROR
+gzip container self-test PASSED
+
++ /tmp/miniz_gzip_demo/example7 c /home/ys/feedback/uidreczz28Ypc2VKpeb/output/material/report.txt /home/ys/feedback/uidreczz28Ypc2VKpeb/output/material/report.txt.gz
+miniz.c version: 11.3.2
+Compressed /home/ys/feedback/uidreczz28Ypc2VKpeb/output/material/report.txt (240198 bytes) -> /home/ys/feedback/uidreczz28Ypc2VKpeb/output/material/report.txt.gz (46182 bytes)
+-- .gz 文件头 (1f 8b = gzip magic):
+00000000: 1f8b 0800 0000 0000 00ff 74fd 49b6 253b  ..........t.I.%;
++ gzip -t /home/ys/feedback/uidreczz28Ypc2VKpeb/output/material/report.txt.gz
+系统 gzip -t 校验 miniz 产物: 通过
+miniz 写 -> 系统 gzip 读: 逐字节一致
+
++ /tmp/miniz_gzip_demo/example7 d /tmp/miniz_gzip_demo/sys.gz /tmp/miniz_gzip_demo/rt2.out
+miniz.c version: 11.3.2
+Decompressed /tmp/miniz_gzip_demo/sys.gz (45998 bytes) -> /tmp/miniz_gzip_demo/rt2.out (240198 bytes), CRC-32 verified OK
+系统 gzip 写 -> miniz 读: 逐字节一致

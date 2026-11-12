@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+ - Add gzip (RFC 1952) container support to the zlib-style API: pass window_bits = MZ_DEFAULT_WINDOW_BITS + 16 to mz_deflateInit2()/mz_inflateInit2() to write/read .gz streams, with CRC-32/size footer verification on decompression (see examples/example7.c)
  - Add tdefl_write_image_to_png_file_in_memory_ex2() for writing indexed PNGs (PLTE/tRNS chunks), based on SDL commit 1fa6475
 
 ### 3.1.2

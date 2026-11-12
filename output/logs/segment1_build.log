@@ -1,0 +1,152 @@
++ bash amalgamate.sh
+-- Zip files: miniz.c;miniz.h;examples/example1.c;examples/example2.c;examples/example3.c;examples/example4.c;examples/example5.c;examples/example6.c;examples/example7.c;ChangeLog.md;readme.md;LICENSE
+-- libpng not found, skipping libpng PNG round-trip tests
+-- Configuring done (0.6s)
+-- Generating done (0.1s)
+-- Build files have been written to: /home/ys/feedback/uidreczz28Ypc2VKpeb/_build
+Test compile with GCC...
+Test compile with GCC ANSI...
+_build/amalgamation/miniz.c: In function ‘mz_zip_file_read_func’:
+_build/amalgamation/miniz.c:3582:20: warning: implicit declaration of function ‘ftello’; did you mean ‘ftell’? [-Wimplicit-function-declaration]
+ 3582 | #define MZ_FTELL64 ftello
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4500:28: note: in expansion of macro ‘MZ_FTELL64’
+ 4500 |         mz_int64 cur_ofs = MZ_FTELL64(pZip->m_pState->m_pFile);
+      |                            ^~~~~~~~~~
+_build/amalgamation/miniz.c:3583:20: warning: implicit declaration of function ‘fseeko’; did you mean ‘fseek’? [-Wimplicit-function-declaration]
+ 3583 | #define MZ_FSEEK64 fseeko
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4504:80: note: in expansion of macro ‘MZ_FSEEK64’
+ 4504 |         if (((mz_int64)file_ofs < 0) || (((cur_ofs != (mz_int64)file_ofs)) && (MZ_FSEEK64(pZip->m_pState->m_pFile, (mz_int64)file_ofs, SEEK_SET))))
+      |                                                                                ^~~~~~~~~~
+/usr/bin/clang
+Test compile with clang...
+main.c:1:9: warning: a function declaration without a prototype is deprecated in all versions of C [-Wstrict-prototypes]
+    1 | int main() { return 0; }
+      |         ^
+      |          void
+1 warning generated.
+Test compile with GCC and define MINIZ_NO_STDIO...
+Test compile with GCC and define MINIZ_NO_TIME...
+_build/amalgamation/miniz.c: In function ‘mz_zip_file_read_func’:
+_build/amalgamation/miniz.c:3582:20: warning: implicit declaration of function ‘ftello’; did you mean ‘ftell’? [-Wimplicit-function-declaration]
+ 3582 | #define MZ_FTELL64 ftello
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4500:28: note: in expansion of macro ‘MZ_FTELL64’
+ 4500 |         mz_int64 cur_ofs = MZ_FTELL64(pZip->m_pState->m_pFile);
+      |                            ^~~~~~~~~~
+_build/amalgamation/miniz.c:3583:20: warning: implicit declaration of function ‘fseeko’; did you mean ‘fseek’? [-Wimplicit-function-declaration]
+ 3583 | #define MZ_FSEEK64 fseeko
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4504:80: note: in expansion of macro ‘MZ_FSEEK64’
+ 4504 |         if (((mz_int64)file_ofs < 0) || (((cur_ofs != (mz_int64)file_ofs)) && (MZ_FSEEK64(pZip->m_pState->m_pFile, (mz_int64)file_ofs, SEEK_SET))))
+      |                                                                                ^~~~~~~~~~
+Test compile with GCC and define MINIZ_NO_DEFLATE_APIS...
+_build/amalgamation/miniz.c: In function ‘mz_zip_file_read_func’:
+_build/amalgamation/miniz.c:3582:20: warning: implicit declaration of function ‘ftello’; did you mean ‘ftell’? [-Wimplicit-function-declaration]
+ 3582 | #define MZ_FTELL64 ftello
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4500:28: note: in expansion of macro ‘MZ_FTELL64’
+ 4500 |         mz_int64 cur_ofs = MZ_FTELL64(pZip->m_pState->m_pFile);
+      |                            ^~~~~~~~~~
+_build/amalgamation/miniz.c:3583:20: warning: implicit declaration of function ‘fseeko’; did you mean ‘fseek’? [-Wimplicit-function-declaration]
+ 3583 | #define MZ_FSEEK64 fseeko
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4504:80: note: in expansion of macro ‘MZ_FSEEK64’
+ 4504 |         if (((mz_int64)file_ofs < 0) || (((cur_ofs != (mz_int64)file_ofs)) && (MZ_FSEEK64(pZip->m_pState->m_pFile, (mz_int64)file_ofs, SEEK_SET))))
+      |                                                                                ^~~~~~~~~~
+Test compile with GCC and define MINIZ_NO_INFLATE_APIS...
+Test compile with GCC and define MINIZ_NO_ARCHIVE_APIS...
+Test compile with GCC and define MINIZ_NO_ARCHIVE_WRITING_APIS...
+_build/amalgamation/miniz.c: In function ‘mz_zip_file_read_func’:
+_build/amalgamation/miniz.c:3582:20: warning: implicit declaration of function ‘ftello’; did you mean ‘ftell’? [-Wimplicit-function-declaration]
+ 3582 | #define MZ_FTELL64 ftello
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4500:28: note: in expansion of macro ‘MZ_FTELL64’
+ 4500 |         mz_int64 cur_ofs = MZ_FTELL64(pZip->m_pState->m_pFile);
+      |                            ^~~~~~~~~~
+_build/amalgamation/miniz.c:3583:20: warning: implicit declaration of function ‘fseeko’; did you mean ‘fseek’? [-Wimplicit-function-declaration]
+ 3583 | #define MZ_FSEEK64 fseeko
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4504:80: note: in expansion of macro ‘MZ_FSEEK64’
+ 4504 |         if (((mz_int64)file_ofs < 0) || (((cur_ofs != (mz_int64)file_ofs)) && (MZ_FSEEK64(pZip->m_pState->m_pFile, (mz_int64)file_ofs, SEEK_SET))))
+      |                                                                                ^~~~~~~~~~
+Test compile with GCC and define MINIZ_NO_ZLIB_APIS...
+_build/amalgamation/miniz.c: In function ‘mz_zip_file_read_func’:
+_build/amalgamation/miniz.c:3582:20: warning: implicit declaration of function ‘ftello’; did you mean ‘ftell’? [-Wimplicit-function-declaration]
+ 3582 | #define MZ_FTELL64 ftello
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4500:28: note: in expansion of macro ‘MZ_FTELL64’
+ 4500 |         mz_int64 cur_ofs = MZ_FTELL64(pZip->m_pState->m_pFile);
+      |                            ^~~~~~~~~~
+_build/amalgamation/miniz.c:3583:20: warning: implicit declaration of function ‘fseeko’; did you mean ‘fseek’? [-Wimplicit-function-declaration]
+ 3583 | #define MZ_FSEEK64 fseeko
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4504:80: note: in expansion of macro ‘MZ_FSEEK64’
+ 4504 |         if (((mz_int64)file_ofs < 0) || (((cur_ofs != (mz_int64)file_ofs)) && (MZ_FSEEK64(pZip->m_pState->m_pFile, (mz_int64)file_ofs, SEEK_SET))))
+      |                                                                                ^~~~~~~~~~
+Test compile with GCC and define MINIZ_NO_ZLIB_COMPATIBLE_NAMES...
+_build/amalgamation/miniz.c: In function ‘mz_zip_file_read_func’:
+_build/amalgamation/miniz.c:3582:20: warning: implicit declaration of function ‘ftello’; did you mean ‘ftell’? [-Wimplicit-function-declaration]
+ 3582 | #define MZ_FTELL64 ftello
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4500:28: note: in expansion of macro ‘MZ_FTELL64’
+ 4500 |         mz_int64 cur_ofs = MZ_FTELL64(pZip->m_pState->m_pFile);
+      |                            ^~~~~~~~~~
+_build/amalgamation/miniz.c:3583:20: warning: implicit declaration of function ‘fseeko’; did you mean ‘fseek’? [-Wimplicit-function-declaration]
+ 3583 | #define MZ_FSEEK64 fseeko
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4504:80: note: in expansion of macro ‘MZ_FSEEK64’
+ 4504 |         if (((mz_int64)file_ofs < 0) || (((cur_ofs != (mz_int64)file_ofs)) && (MZ_FSEEK64(pZip->m_pState->m_pFile, (mz_int64)file_ofs, SEEK_SET))))
+      |                                                                                ^~~~~~~~~~
+Test compile with GCC and define MINIZ_NO_MALLOC...
+_build/amalgamation/miniz.c: In function ‘mz_zip_file_read_func’:
+_build/amalgamation/miniz.c:3582:20: warning: implicit declaration of function ‘ftello’; did you mean ‘ftell’? [-Wimplicit-function-declaration]
+ 3582 | #define MZ_FTELL64 ftello
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4500:28: note: in expansion of macro ‘MZ_FTELL64’
+ 4500 |         mz_int64 cur_ofs = MZ_FTELL64(pZip->m_pState->m_pFile);
+      |                            ^~~~~~~~~~
+_build/amalgamation/miniz.c:3583:20: warning: implicit declaration of function ‘fseeko’; did you mean ‘fseek’? [-Wimplicit-function-declaration]
+ 3583 | #define MZ_FSEEK64 fseeko
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4504:80: note: in expansion of macro ‘MZ_FSEEK64’
+ 4504 |         if (((mz_int64)file_ofs < 0) || (((cur_ofs != (mz_int64)file_ofs)) && (MZ_FSEEK64(pZip->m_pState->m_pFile, (mz_int64)file_ofs, SEEK_SET))))
+      |                                                                                ^~~~~~~~~~
+Test compile with GCC and MINIZ_USE_UNALIGNED_LOADS_AND_STORES=1...
+_build/amalgamation/miniz.c: In function ‘mz_zip_file_read_func’:
+_build/amalgamation/miniz.c:3582:20: warning: implicit declaration of function ‘ftello’; did you mean ‘ftell’? [-Wimplicit-function-declaration]
+ 3582 | #define MZ_FTELL64 ftello
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4500:28: note: in expansion of macro ‘MZ_FTELL64’
+ 4500 |         mz_int64 cur_ofs = MZ_FTELL64(pZip->m_pState->m_pFile);
+      |                            ^~~~~~~~~~
+_build/amalgamation/miniz.c:3583:20: warning: implicit declaration of function ‘fseeko’; did you mean ‘fseek’? [-Wimplicit-function-declaration]
+ 3583 | #define MZ_FSEEK64 fseeko
+      |                    ^~~~~~
+_build/amalgamation/miniz.c:4504:80: note: in expansion of macro ‘MZ_FSEEK64’
+ 4504 |         if (((mz_int64)file_ofs < 0) || (((cur_ofs != (mz_int64)file_ofs)) && (MZ_FSEEK64(pZip->m_pState->m_pFile, (mz_int64)file_ofs, SEEK_SET))))
+      |                                                                                ^~~~~~~~~~
+amalgamate.sh: line 43: zip: command not found
+(注: amalgamate.sh 末尾的 zip 打包步骤因环境无 zip 命令跳过, 编译检查已全部通过)
++ gcc examples/example1.c amalgamation/miniz.c -o /tmp/miniz_gzip_demo/example1 -lm -I. -ggdb
++ gcc examples/example2.c amalgamation/miniz.c -o /tmp/miniz_gzip_demo/example2 -lm -I. -ggdb
++ gcc examples/example3.c amalgamation/miniz.c -o /tmp/miniz_gzip_demo/example3 -lm -I. -ggdb
++ gcc examples/example4.c amalgamation/miniz.c -o /tmp/miniz_gzip_demo/example4 -lm -I. -ggdb
++ gcc examples/example5.c amalgamation/miniz.c -o /tmp/miniz_gzip_demo/example5 -lm -I. -ggdb
++ gcc examples/example6.c amalgamation/miniz.c -o /tmp/miniz_gzip_demo/example6 -lm -I. -ggdb
++ gcc examples/example7.c amalgamation/miniz.c -o /tmp/miniz_gzip_demo/example7 -lm -I. -ggdb
++ g++ tests/miniz_tester.cpp tests/timer.cpp amalgamation/miniz.c -o /tmp/miniz_gzip_demo/miniz_tester -I. -ggdb -O2
+tests/miniz_tester.cpp: In function ‘bool zip_create(const char*, const char*)’:
+tests/miniz_tester.cpp:921:10: warning: format ‘%llu’ expects argument of type ‘long long unsigned int’, but argument 3 has type ‘mz_uint64’ {aka ‘long unsigned int’} [-Wformat=]
+  921 |   printf("Created zip file \"%s\", file size: " QUAD_INT_FMT "\n", pZip_filename, zip.m_archive_size);
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                 ~~~~~~~~~~~~~~~~~~
+      |                                                                                       |
+      |                                                                                       mz_uint64 {aka long unsigned int}
+tests/miniz_tester.cpp:64:26: note: format string is defined here
+   64 | #define QUAD_INT_FMT "%llu"
+      |                       ~~~^
+      |                          |
+      |                          long long unsigned int
+      |                       %lu
+构建完成: example1..7 + miniz_tester (基于 amalgamation/miniz.c, 与 test.sh 相同的构建方式)

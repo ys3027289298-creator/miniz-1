@@ -1,0 +1,6 @@
+检出成功 [deflate 载荷比特翻转]: mz_inflate 返回 MZ_DATA_ERROR
+交叉验证 [deflate 载荷比特翻转]: 系统 gzip -t 同样报错
+检出成功 [CRC-32 尾比特翻转]: mz_inflate 返回 MZ_DATA_ERROR
+交叉验证 [CRC-32 尾比特翻转]: 系统 gzip -t 同样报错
+检出成功 [文件截断]: 解压报错退出
+== 校验错误检出: 通过 ==
