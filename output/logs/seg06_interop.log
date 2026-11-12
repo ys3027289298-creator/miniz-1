@@ -1,0 +1,19 @@
+
+================================================================
+  Segment 6/7: old/new format interop - miniz <-> python zipfile
+================================================================
+
+* miniz writes a classic zip, python reads it
+write OK: 3 files, zip64=0
+read OK: 3 files, zip64=0
+
+* python writes classic + forced-zip64 zips, miniz reads them
+  python read miniz classic zip: OK
+  miniz read py_classic.zip: files=2 zip64=0
+  miniz extracted CRCs match python's for py_classic.zip: OK
+  miniz read py_zip64.zip: files=2 zip64=0
+  miniz extracted CRCs match python's for py_zip64.zip: OK
+* python writes a true zip64 archive (66000 entries), miniz reads it
+  python wrote 66000-entry zip64 archive
+files=66000 zip64=1
+f00000.txt size=1 crc=8cdc1683

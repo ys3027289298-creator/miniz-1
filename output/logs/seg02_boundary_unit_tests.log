@@ -1,0 +1,20 @@
+
+================================================================
+  Segment 2/7: boundary behavior (65535/65536 entries, crossing 4GB, over-limit error codes)
+================================================================
+
+* writer switches to zip64 automatically past classic limits
+Filters: "Zip writer automatically switches to zip64 past classic limits"
+Randomness seeded to: 311195748
+===============================================================================
+All tests passed (131105 assertions in 1 test case)
+
+
+* reader rejects archives beyond zip64 practical limits with error codes
+Filters: "Zip reader rejects archives beyond zip64 practical limits"
+Randomness seeded to: 3223785517
+===============================================================================
+All tests passed (4 assertions in 1 test case)
+
+
+--- segment pause ---

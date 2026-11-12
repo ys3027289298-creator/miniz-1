@@ -1,0 +1,11 @@
+
+================================================================
+  Segment 7/7: beyond the extended limits - proper error codes
+================================================================
+
+* hand-crafted ZIP64 end-of-central-directory records past miniz's practical limits
+entries = 2^32 (beyond zip64 practical limit): rejected with too many files
+central dir = 4GB (beyond zip64 practical limit): rejected with unsupported central directory size
+all over-limit cases returned the expected error codes
+
+--- segment pause ---

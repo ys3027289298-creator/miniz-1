@@ -1,0 +1,6 @@
+{"version":3,"term":{"cols":80,"rows":24},"timestamp":1794508659,"command":"bash 'scripts/seg07_overlimit_errors.sh' 2>&1 | tee 'logs/seg07_overlimit_errors.log'","title":"seg07_overlimit_errors","env":{"SHELL":"/bin/bash"}}
+[0.015, "o", "\r\n================================================================\r\n  Segment 7/7: beyond the extended limits - proper error codes\r\n================================================================\r\n\r\n"]
+[3.220, "o", "* hand-crafted ZIP64 end-of-central-directory records past miniz's practical limits\r\n"]
+[0.001, "o", "entries = 2^32 (beyond zip64 practical limit): rejected with too many files\r\ncentral dir = 4GB (beyond zip64 practical limit): rejected with unsupported central directory size\r\nall over-limit cases returned the expected error codes\r\n"]
+[0.000, "o", "\r\n--- segment pause ---\r\n"]
+[3.007, "x", "0"]

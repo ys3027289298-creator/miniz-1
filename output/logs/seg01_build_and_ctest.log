@@ -1,0 +1,112 @@
+
+================================================================
+  Segment 1/7: build miniz and run the repo's own tests (cmake + ctest)
+================================================================
+
+-- libpng not found, skipping libpng PNG round-trip tests
+-- Configuring done (0.2s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/ys/feedback/uidreczz28Ypc2VLEbr/build
+/usr/bin/cmake -S/home/ys/feedback/uidreczz28Ypc2VLEbr -B/home/ys/feedback/uidreczz28Ypc2VLEbr/build --check-build-system CMakeFiles/Makefile.cmake 0
+/usr/bin/cmake -E cmake_progress_start /home/ys/feedback/uidreczz28Ypc2VLEbr/build/CMakeFiles /home/ys/feedback/uidreczz28Ypc2VLEbr/build//CMakeFiles/progress.marks
+/usr/bin/gmake  -f CMakeFiles/Makefile2 all
+gmake[1]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+/usr/bin/gmake  -f CMakeFiles/miniz.dir/build.make CMakeFiles/miniz.dir/depend
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+cd /home/ys/feedback/uidreczz28Ypc2VLEbr/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build/CMakeFiles/miniz.dir/DependInfo.cmake "--color="
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+/usr/bin/gmake  -f CMakeFiles/miniz.dir/build.make CMakeFiles/miniz.dir/build
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Nothing to be done for 'CMakeFiles/miniz.dir/build'.
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+[ 22%] Built target miniz
+/usr/bin/gmake  -f CMakeFiles/example1.dir/build.make CMakeFiles/example1.dir/depend
+/usr/bin/gmake  -f CMakeFiles/example2.dir/build.make CMakeFiles/example2.dir/depend
+/usr/bin/gmake  -f CMakeFiles/example3.dir/build.make CMakeFiles/example3.dir/depend
+/usr/bin/gmake  -f CMakeFiles/example4.dir/build.make CMakeFiles/example4.dir/depend
+/usr/bin/gmake  -f CMakeFiles/example5.dir/build.make CMakeFiles/example5.dir/depend
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+cd /home/ys/feedback/uidreczz28Ypc2VLEbr/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build/CMakeFiles/example1.dir/DependInfo.cmake "--color="
+/usr/bin/gmake  -f CMakeFiles/example6.dir/build.make CMakeFiles/example6.dir/depend
+/usr/bin/gmake  -f CMakeFiles/catch_tests.dir/build.make CMakeFiles/catch_tests.dir/depend
+/usr/bin/gmake  -f CMakeFiles/png_roundtrip_gen.dir/build.make CMakeFiles/png_roundtrip_gen.dir/depend
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+cd /home/ys/feedback/uidreczz28Ypc2VLEbr/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build/CMakeFiles/example2.dir/DependInfo.cmake "--color="
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+cd /home/ys/feedback/uidreczz28Ypc2VLEbr/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build/CMakeFiles/example3.dir/DependInfo.cmake "--color="
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+cd /home/ys/feedback/uidreczz28Ypc2VLEbr/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build/CMakeFiles/example4.dir/DependInfo.cmake "--color="
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+cd /home/ys/feedback/uidreczz28Ypc2VLEbr/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build/CMakeFiles/example5.dir/DependInfo.cmake "--color="
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+cd /home/ys/feedback/uidreczz28Ypc2VLEbr/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build/CMakeFiles/catch_tests.dir/DependInfo.cmake "--color="
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+cd /home/ys/feedback/uidreczz28Ypc2VLEbr/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build/CMakeFiles/example6.dir/DependInfo.cmake "--color="
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+cd /home/ys/feedback/uidreczz28Ypc2VLEbr/build && /usr/bin/cmake -E cmake_depends "Unix Makefiles" /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build /home/ys/feedback/uidreczz28Ypc2VLEbr/build/CMakeFiles/png_roundtrip_gen.dir/DependInfo.cmake "--color="
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+/usr/bin/gmake  -f CMakeFiles/example1.dir/build.make CMakeFiles/example1.dir/build
+/usr/bin/gmake  -f CMakeFiles/example2.dir/build.make CMakeFiles/example2.dir/build
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+/usr/bin/gmake  -f CMakeFiles/example3.dir/build.make CMakeFiles/example3.dir/build
+/usr/bin/gmake  -f CMakeFiles/example4.dir/build.make CMakeFiles/example4.dir/build
+/usr/bin/gmake  -f CMakeFiles/example5.dir/build.make CMakeFiles/example5.dir/build
+/usr/bin/gmake  -f CMakeFiles/example6.dir/build.make CMakeFiles/example6.dir/build
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Nothing to be done for 'CMakeFiles/example2.dir/build'.
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Nothing to be done for 'CMakeFiles/example1.dir/build'.
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Nothing to be done for 'CMakeFiles/example3.dir/build'.
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Nothing to be done for 'CMakeFiles/example5.dir/build'.
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Nothing to be done for 'CMakeFiles/example4.dir/build'.
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+/usr/bin/gmake  -f CMakeFiles/png_roundtrip_gen.dir/build.make CMakeFiles/png_roundtrip_gen.dir/build
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Nothing to be done for 'CMakeFiles/example6.dir/build'.
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+/usr/bin/gmake  -f CMakeFiles/catch_tests.dir/build.make CMakeFiles/catch_tests.dir/build
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Nothing to be done for 'CMakeFiles/png_roundtrip_gen.dir/build'.
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Entering directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+gmake[2]: Nothing to be done for 'CMakeFiles/catch_tests.dir/build'.
+gmake[2]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+[ 63%] Built target example2
+[ 68%] Built target example3
+[ 63%] Built target example4
+[ 63%] Built target example5
+[ 63%] Built target example1
+[ 77%] Built target example6
+[ 86%] Built target png_roundtrip_gen
+[100%] Built target catch_tests
+gmake[1]: Leaving directory '/home/ys/feedback/uidreczz28Ypc2VLEbr/build'
+/usr/bin/cmake -E cmake_progress_start /home/ys/feedback/uidreczz28Ypc2VLEbr/build/CMakeFiles 0
+Test project /home/ys/feedback/uidreczz28Ypc2VLEbr/build
+    Start 1: catch_tests
+1/3 Test #1: catch_tests ......................   Passed   12.91 sec
+    Start 2: png_roundtrip_python
+2/3 Test #2: png_roundtrip_python .............***Skipped   0.02 sec
+    Start 3: install_test
+3/3 Test #3: install_test .....................   Passed    2.55 sec
+
+100% tests passed, 0 tests failed out of 3
+
+Total Test time (real) =  15.48 sec
+
+The following tests did not run:
+	  2 - png_roundtrip_python (Skipped)
+
+--- segment pause ---

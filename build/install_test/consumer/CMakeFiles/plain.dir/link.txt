@@ -1,0 +1,1 @@
+/usr/bin/cc CMakeFiles/plain.dir/main.c.o -o plain  /home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/prefix/lib/libminiz.a 

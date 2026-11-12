@@ -6,6 +6,11 @@
 #include <vector>
 #include <memory>
 #include <unordered_set>
+#include <array>
+#include <map>
+#include <algorithm>
+#include <cstdio>
+#include <cstring>
 
 #ifdef _WIN32
 #define unlink _unlink
@@ -443,6 +448,277 @@ TEST_CASE("Zip reader zip64 local header offset out of bounds")
 
     free(p);
     mz_zip_reader_end(&zip);
+}
+
+#ifndef MINIZ_NO_ARCHIVE_WRITING_APIS
+namespace
+{
+    /* Virtual storage for huge test archives: only non-zero 4KB blocks are
+     * kept, so a multi-GB archive costs a few KB of actual memory. */
+    struct sparse_virtual_archive
+    {
+        static constexpr mz_uint64 block_size = 4096;
+        std::map<mz_uint64, std::array<mz_uint8, block_size>> blocks;
+        mz_uint64 size = 0;
+        bool saw_zip64_eocd = false;
+
+        static size_t write(void *opaque, mz_uint64 ofs, const void *buf, size_t n)
+        {
+            auto *self = static_cast<sparse_virtual_archive *>(opaque);
+            const auto *bytes = static_cast<const mz_uint8 *>(buf);
+            static const mz_uint8 zip64_eocd_sig[] = { 0x50, 0x4b, 0x06, 0x06 };
+
+            for (size_t i = 0; i + sizeof(zip64_eocd_sig) <= n; ++i)
+            {
+                if (memcmp(bytes + i, zip64_eocd_sig, sizeof(zip64_eocd_sig)) == 0)
+                {
+                    self->saw_zip64_eocd = true;
+                    break;
+                }
+            }
+
+            mz_uint64 pos = ofs;
+            size_t remaining = n;
+            while (remaining)
+            {
+                const mz_uint64 block_index = pos / block_size;
+                const size_t block_ofs = static_cast<size_t>(pos % block_size);
+                const size_t chunk = std::min(remaining, static_cast<size_t>(block_size) - block_ofs);
+
+                bool all_zero = true;
+                for (size_t i = 0; i < chunk; ++i)
+                {
+                    if (bytes[i])
+                    {
+                        all_zero = false;
+                        break;
+                    }
+                }
+
+                if (all_zero)
+                {
+                    auto it = self->blocks.find(block_index);
+                    if (it != self->blocks.end())
+                        memcpy(it->second.data() + block_ofs, bytes, chunk);
+                }
+                else
+                {
+                    auto result = self->blocks.try_emplace(block_index);
+                    if (result.second)
+                        result.first->second.fill(0);
+                    memcpy(result.first->second.data() + block_ofs, bytes, chunk);
+                }
+
+                bytes += chunk;
+                pos += chunk;
+                remaining -= chunk;
+            }
+
+            self->size = std::max(self->size, ofs + n);
+            return n;
+        }
+
+        static size_t read(void *opaque, mz_uint64 ofs, void *buf, size_t n)
+        {
+            auto *self = static_cast<sparse_virtual_archive *>(opaque);
+            auto *dst = static_cast<mz_uint8 *>(buf);
+
+            if (ofs >= self->size)
+                return 0;
+
+            size_t remaining = static_cast<size_t>(std::min<mz_uint64>(n, self->size - ofs));
+            const size_t total = remaining;
+            mz_uint64 pos = ofs;
+            while (remaining)
+            {
+                const mz_uint64 block_index = pos / block_size;
+                const size_t block_ofs = static_cast<size_t>(pos % block_size);
+                const size_t chunk = std::min(remaining, static_cast<size_t>(block_size) - block_ofs);
+                auto it = self->blocks.find(block_index);
+                if (it != self->blocks.end())
+                    memcpy(dst, it->second.data() + block_ofs, chunk);
+                else
+                    memset(dst, 0, chunk);
+                dst += chunk;
+                pos += chunk;
+                remaining -= chunk;
+            }
+            return total;
+        }
+    };
+
+    static size_t zeroes_read(void *opaque, mz_uint64 ofs, void *buf, size_t n)
+    {
+        auto *size = static_cast<mz_uint64 *>(opaque);
+        if (ofs >= *size)
+            return 0;
+        const size_t count = static_cast<size_t>(std::min<mz_uint64>(n, *size - ofs));
+        memset(buf, 0, count);
+        return count;
+    }
+}
+
+TEST_CASE("Zip writer automatically switches to zip64 past classic limits")
+{
+    SECTION("archive grows beyond 4GB during writing")
+    {
+        sparse_virtual_archive storage;
+        mz_zip_archive zip = {};
+        zip.m_pWrite = sparse_virtual_archive::write;
+        zip.m_pIO_opaque = &storage;
+        REQUIRE(mz_zip_writer_init(&zip, 0));
+
+        /* Two stored files, each below 4GB, but together pushing the archive past 4GB */
+        mz_uint64 file_a_size = 2ull * 1024 * 1024 * 1024;
+        mz_uint64 file_b_size = file_a_size + 64 * 1024;
+        REQUIRE(mz_zip_writer_add_read_buf_callback(&zip, "a.bin", zeroes_read, &file_a_size, file_a_size, nullptr, nullptr, 0, MZ_NO_COMPRESSION, nullptr, 0, nullptr, 0));
+        REQUIRE(mz_zip_writer_add_read_buf_callback(&zip, "b.bin", zeroes_read, &file_b_size, file_b_size, nullptr, nullptr, 0, MZ_NO_COMPRESSION, nullptr, 0, nullptr, 0));
+
+        REQUIRE(zip.m_archive_size > 0xFFFFFFFFull);
+        REQUIRE(mz_zip_writer_finalize_archive(&zip));
+        CHECK(mz_zip_is_zip64(&zip));
+        CHECK(storage.saw_zip64_eocd);
+        REQUIRE(mz_zip_writer_end(&zip));
+
+        /* Read the virtual archive back through the same sparse storage */
+        mz_zip_archive reader = {};
+        reader.m_pRead = sparse_virtual_archive::read;
+        reader.m_pIO_opaque = &storage;
+        REQUIRE(mz_zip_reader_init(&reader, storage.size, 0));
+        REQUIRE(mz_zip_reader_get_num_files(&reader) == 2);
+        CHECK(mz_zip_is_zip64(&reader));
+
+        mz_zip_archive_file_stat stat = {};
+        REQUIRE(mz_zip_reader_file_stat(&reader, 0, &stat));
+        CHECK(stat.m_uncomp_size == file_a_size);
+        REQUIRE(mz_zip_reader_file_stat(&reader, 1, &stat));
+        CHECK(stat.m_uncomp_size == file_b_size);
+
+        mz_uint64 extracted = 0;
+        auto count_bytes = [](void *opaque, mz_uint64, const void *, size_t n) -> size_t
+        {
+            *static_cast<mz_uint64 *>(opaque) += n;
+            return n;
+        };
+        REQUIRE(mz_zip_reader_extract_to_callback(&reader, 1, count_bytes, &extracted, 0));
+        CHECK(extracted == file_b_size);
+        REQUIRE(mz_zip_reader_end(&reader));
+    }
+
+    SECTION("more than 65535 files")
+    {
+        mz_zip_archive zip = {};
+        REQUIRE(mz_zip_writer_init_heap(&zip, 0, 0));
+
+        const char contents = 'x';
+        char name[16];
+        for (mz_uint i = 0; i <= MZ_UINT16_MAX; ++i)
+        {
+            snprintf(name, sizeof(name), "f%06u", i);
+            REQUIRE(mz_zip_writer_add_mem(&zip, name, &contents, 1, MZ_NO_COMPRESSION));
+        }
+
+        void *buf = nullptr;
+        size_t buf_size = 0;
+        REQUIRE(mz_zip_writer_finalize_heap_archive(&zip, &buf, &buf_size));
+        CHECK(mz_zip_is_zip64(&zip));
+        REQUIRE(mz_zip_writer_end(&zip));
+
+        mz_zip_archive reader = {};
+        REQUIRE(mz_zip_reader_init_mem(&reader, buf, buf_size, 0));
+        CHECK(mz_zip_reader_get_num_files(&reader) == MZ_UINT16_MAX + 1);
+        CHECK(mz_zip_is_zip64(&reader));
+        REQUIRE(mz_zip_reader_end(&reader));
+        free(buf);
+    }
+
+    SECTION("exactly 65535 files stays classic zip")
+    {
+        mz_zip_archive zip = {};
+        REQUIRE(mz_zip_writer_init_heap(&zip, 0, 0));
+
+        const char contents = 'x';
+        char name[16];
+        for (mz_uint i = 0; i < MZ_UINT16_MAX; ++i)
+        {
+            snprintf(name, sizeof(name), "f%06u", i);
+            REQUIRE(mz_zip_writer_add_mem(&zip, name, &contents, 1, MZ_NO_COMPRESSION));
+        }
+
+        void *buf = nullptr;
+        size_t buf_size = 0;
+        REQUIRE(mz_zip_writer_finalize_heap_archive(&zip, &buf, &buf_size));
+        CHECK_FALSE(mz_zip_is_zip64(&zip));
+        REQUIRE(mz_zip_writer_end(&zip));
+
+        mz_zip_archive reader = {};
+        REQUIRE(mz_zip_reader_init_mem(&reader, buf, buf_size, 0));
+        CHECK(mz_zip_reader_get_num_files(&reader) == MZ_UINT16_MAX);
+        CHECK_FALSE(mz_zip_is_zip64(&reader));
+        REQUIRE(mz_zip_reader_end(&reader));
+        free(buf);
+    }
+}
+#endif /* MINIZ_NO_ARCHIVE_WRITING_APIS */
+
+TEST_CASE("Zip reader rejects archives beyond zip64 practical limits")
+{
+    /* Minimal archive: zip64 EOCD + zip64 locator + classic EOCD */
+    auto make_archive = [](mz_uint64 total_entries, mz_uint64 cdir_size)
+    {
+        std::array<mz_uint8, 98> buf{};
+        auto put16 = [&](size_t ofs, mz_uint16 v)
+        {
+            buf[ofs] = static_cast<mz_uint8>(v);
+            buf[ofs + 1] = static_cast<mz_uint8>(v >> 8);
+        };
+        auto put32 = [&](size_t ofs, mz_uint32 v)
+        {
+            put16(ofs, static_cast<mz_uint16>(v));
+            put16(ofs + 2, static_cast<mz_uint16>(v >> 16));
+        };
+        auto put64 = [&](size_t ofs, mz_uint64 v)
+        {
+            put32(ofs, static_cast<mz_uint32>(v));
+            put32(ofs + 4, static_cast<mz_uint32>(v >> 32));
+        };
+
+        put32(0, 0x06064b50);     /* zip64 EOCD signature */
+        put64(4, 44);             /* size of zip64 EOCD record */
+        put16(12, 45);            /* version made by */
+        put16(14, 45);            /* version needed */
+        put64(24, total_entries); /* entries on this disk */
+        put64(32, total_entries); /* total entries */
+        put64(40, cdir_size);     /* central directory size */
+        put64(48, 0);             /* central directory offset */
+
+        put32(56, 0x07064b50);    /* zip64 locator signature */
+        put64(64, 0);             /* offset of zip64 EOCD */
+        put32(72, 1);             /* total number of disks */
+
+        put32(76, 0x06054b50);    /* classic EOCD signature */
+        put16(84, 0xFFFF);        /* entries on this disk */
+        put16(86, 0xFFFF);        /* total entries */
+        put32(88, 0xFFFFFFFF);    /* central directory size */
+        put32(92, 0xFFFFFFFF);    /* central directory offset */
+        return buf;
+    };
+
+    SECTION("entry count beyond 32-bit range reports too many files")
+    {
+        auto archive = make_archive(0x100000000ull, 0);
+        mz_zip_archive zip = {};
+        CHECK_FALSE(mz_zip_reader_init_mem(&zip, archive.data(), archive.size(), 0));
+        CHECK(mz_zip_get_last_error(&zip) == MZ_ZIP_TOO_MANY_FILES);
+    }
+
+    SECTION("central directory beyond 4GB reports unsupported size")
+    {
+        auto archive = make_archive(1, 0x100000000ull);
+        mz_zip_archive zip = {};
+        CHECK_FALSE(mz_zip_reader_init_mem(&zip, archive.data(), archive.size(), 0));
+        CHECK(mz_zip_get_last_error(&zip) == MZ_ZIP_UNSUPPORTED_CDIR_SIZE);
+    }
 }
 
 TEST_CASE("Tinfl / tdefl tests")

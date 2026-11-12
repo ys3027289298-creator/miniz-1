@@ -1,0 +1,26 @@
+
+================================================================
+  Segment 5/7: many entries - 65535 (classic) vs 65536/70000/80000 (ZIP64)
+================================================================
+
+* boundary: exactly 65535 entries stays classic zip
+write OK: 65535 files, zip64=0
+read OK: 65535 files, zip64=0
+
+* boundary: 65536 entries automatically switches to zip64
+write OK: 65536 files, zip64=1
+read OK: 65536 files, zip64=1
+
+* 70000 entries, verified by python's zipfile
+write OK: 70000 files, zip64=1
+read OK: 70000 files, zip64=1
+  python zipfile: 70000 entries
+  python zipfile: OK
+
+* 80000 entries via mz_zip_writer_add_from_zip_reader (two classic 40000-entry sources)
+  two classic 40000-entry source zips created by python
+copy OK: 80000 files, zip64=1
+  python zipfile: 80000 entries
+  python zipfile: OK
+
+--- segment pause ---

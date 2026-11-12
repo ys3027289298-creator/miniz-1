@@ -1,0 +1,21 @@
+
+================================================================
+  Segment 4/7: single 5GB file - ZIP64 round-trip with constant memory
+================================================================
+
+* test asset: one sparse 5GB file
+-rw-r--r-- 1 ys ys 5.0G Nov 13 02:36 /tmp/mzdemo/lf.bin
+
+* write + read + extract (deflate), watching peak memory
+write OK, zip64=1
+read OK: uncomp=5368709120 comp=5214530 zip64=1
+extract OK
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:42.91
+	Maximum resident set size (kbytes): 2092
+
+* compare extracted data with the original
+extracted file is identical to the original
+
+* peak memory stays in the low MB range although the file is 5GB
+
+--- segment pause ---

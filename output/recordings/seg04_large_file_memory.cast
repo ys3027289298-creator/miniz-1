@@ -1,0 +1,10 @@
+{"version":3,"term":{"cols":80,"rows":24},"timestamp":1794508588,"command":"bash 'scripts/seg04_large_file_memory.sh' 2>&1 | tee 'logs/seg04_large_file_memory.log'","title":"seg04_large_file_memory","env":{"SHELL":"/bin/bash"}}
+[0.017, "o", "\r\n================================================================\r\n  Segment 4/7: single 5GB file - ZIP64 round-trip with constant memory\r\n================================================================\r\n\r\n"]
+[2.003, "o", "* test asset: one sparse 5GB file\r\n"]
+[0.008, "o", "-rw-r--r-- 1 ys ys 5.0G Nov 13 02:36 /tmp/mzdemo/lf.bin\r\n"]
+[0.000, "o", "\r\n"]
+[1.233, "o", "* write + read + extract (deflate), watching peak memory\r\n"]
+[48.529, "o", "write OK, zip64=1\r\nread OK: uncomp=5368709120 comp=5214530 zip64=1\r\nextract OK\r\n\tElapsed (wall clock) time (h:mm:ss or m:ss): 0:42.91\r\n\tMaximum resident set size (kbytes): 2092\r\n\r\n* compare extracted data with the original\r\n"]
+[5.729, "o", "extracted file is identical to the original\r\n"]
+[0.000, "o", "\r\n* peak memory stays in the low MB range although the file is 5GB\r\n\r\n--- segment pause ---\r\n"]
+[3.054, "x", "0"]

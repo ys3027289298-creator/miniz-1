@@ -4081,9 +4081,9 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
 
         pState = pZip->m_pState;
 
-        /* Don't support copying files from zip64 archives to non-zip64, even though in some cases this is possible */
+        /* Copying from a zip64 archive requires the destination to be zip64 too: switch automatically instead of failing. */
         if ((pSource_zip->m_pState->m_zip64) && (!pZip->m_pState->m_zip64))
-            return mz_zip_set_error(pZip, MZ_ZIP_INVALID_PARAMETER);
+            pZip->m_pState->m_zip64 = MZ_TRUE;
 
         /* Get pointer to the source central dir header and crack it */
         if (NULL == (pSrc_central_header = mz_zip_get_cdh(pSource_zip, src_file_index)))
@@ -4106,7 +4106,10 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
         if (!pState->m_zip64)
         {
             if (pZip->m_total_files == MZ_UINT16_MAX)
-                return mz_zip_set_error(pZip, MZ_ZIP_TOO_MANY_FILES);
+            {
+                pState->m_zip64 = MZ_TRUE;
+                /*return mz_zip_set_error(pZip, MZ_ZIP_TOO_MANY_FILES); */
+            }
         }
         else
         {
@@ -4210,7 +4213,10 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
                                                 pState->m_central_dir.m_size + MZ_ZIP_CENTRAL_DIR_HEADER_SIZE + src_central_dir_following_data_size + MZ_ZIP_END_OF_CENTRAL_DIR_HEADER_SIZE + 64;
 
             if (approx_new_archive_size >= MZ_UINT32_MAX)
-                return mz_zip_set_error(pZip, MZ_ZIP_ARCHIVE_TOO_LARGE);
+            {
+                pState->m_zip64 = MZ_TRUE;
+                /*return mz_zip_set_error(pZip, MZ_ZIP_ARCHIVE_TOO_LARGE); */
+            }
         }
 
         /* Write dest archive padding */
@@ -4433,12 +4439,15 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
         if (pState->m_zip64)
         {
             if ((mz_uint64)pState->m_central_dir.m_size >= MZ_UINT32_MAX)
-                return mz_zip_set_error(pZip, MZ_ZIP_TOO_MANY_FILES);
+                return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_CDIR_SIZE);
         }
         else
         {
             if ((pZip->m_total_files > MZ_UINT16_MAX) || ((pZip->m_archive_size + pState->m_central_dir.m_size + MZ_ZIP_END_OF_CENTRAL_DIR_HEADER_SIZE) > MZ_UINT32_MAX))
-                return mz_zip_set_error(pZip, MZ_ZIP_TOO_MANY_FILES);
+            {
+                /* The archive grew past the limits of the original zip format: automatically switch to zip64 instead of failing. */
+                pState->m_zip64 = MZ_TRUE;
+            }
         }
 
         central_dir_ofs = 0;

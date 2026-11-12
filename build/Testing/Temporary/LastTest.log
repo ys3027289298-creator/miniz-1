@@ -1,0 +1,53 @@
+Start testing: Nov 13 02:34 CST
+----------------------------------------------------------
+1/3 Testing: catch_tests
+1/3 Test: catch_tests
+Command: "/home/ys/feedback/uidreczz28Ypc2VLEbr/bin/catch_tests"
+Directory: /home/ys/feedback/uidreczz28Ypc2VLEbr/build
+"catch_tests" start time: Nov 13 02:34 CST
+Output:
+----------------------------------------------------------
+Randomness seeded to: 1248141518
+===============================================================================
+All tests passed (262498 assertions in 10 test cases)
+
+<end of output>
+Test time =  12.91 sec
+----------------------------------------------------------
+Test Passed.
+"catch_tests" end time: Nov 13 02:34 CST
+"catch_tests" time elapsed: 00:00:12
+----------------------------------------------------------
+
+2/3 Testing: png_roundtrip_python
+2/3 Test: png_roundtrip_python
+Command: "/home/ys/.local/bin/python" "/home/ys/feedback/uidreczz28Ypc2VLEbr/tests/png_roundtrip_check.py" "/home/ys/feedback/uidreczz28Ypc2VLEbr/bin/png_roundtrip_gen" "/home/ys/feedback/uidreczz28Ypc2VLEbr/build/png_roundtrip"
+Directory: /home/ys/feedback/uidreczz28Ypc2VLEbr/build
+"png_roundtrip_python" start time: Nov 13 02:34 CST
+Output:
+----------------------------------------------------------
+Neither Pillow nor pypng is installed; skipping
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"png_roundtrip_python" end time: Nov 13 02:34 CST
+"png_roundtrip_python" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/3 Testing: install_test
+3/3 Test: install_test
+Command: "/usr/bin/cmake" "-DSOURCE_DIR=/home/ys/feedback/uidreczz28Ypc2VLEbr" "-DTEST_DIR=/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test" "-DGENERATOR=Unix Makefiles" "-DGENERATOR_PLATFORM=" "-DGENERATOR_TOOLSET=" "-DC_COMPILER=/usr/bin/cc" "-DTOOLCHAIN_FILE=" "-DBUILD_SHARED_LIBS=OFF" "-DAMALGAMATE_SOURCES=OFF" "-DBUILD_HEADER_ONLY=OFF" "-DCONFIG=Release" "-P" "/home/ys/feedback/uidreczz28Ypc2VLEbr/tests/test_install.cmake"
+Directory: /home/ys/feedback/uidreczz28Ypc2VLEbr/build
+"install_test" start time: Nov 13 02:34 CST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   2.55 sec
+----------------------------------------------------------
+Test Passed.
+"install_test" end time: Nov 13 02:34 CST
+"install_test" time elapsed: 00:00:02
+----------------------------------------------------------
+
+End testing: Nov 13 02:34 CST

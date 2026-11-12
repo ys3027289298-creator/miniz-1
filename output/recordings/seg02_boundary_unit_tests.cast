@@ -1,0 +1,8 @@
+{"version":3,"term":{"cols":80,"rows":24},"timestamp":1794508501,"command":"bash 'scripts/seg02_boundary_unit_tests.sh' 2>&1 | tee 'logs/seg02_boundary_unit_tests.log'","title":"seg02_boundary_unit_tests","env":{"SHELL":"/bin/bash"}}
+[0.016, "o", "\r\n================================================================\r\n  Segment 2/7: boundary behavior (65535/65536 entries, crossing 4GB, over-limit error codes)\r\n================================================================\r\n\r\n"]
+[2.022, "o", "* writer switches to zip64 automatically past classic limits\r\n"]
+[13.157, "o", "Filters: \"Zip writer automatically switches to zip64 past classic limits\"\r\nRandomness seeded to: 311195748\r\n===============================================================================\r\nAll tests passed (131105 assertions in 1 test case)\r\n\r\n"]
+[0.001, "o", "\r\n* reader rejects archives beyond zip64 practical limits with error codes\r\n"]
+[0.003, "o", "Filters: \"Zip reader rejects archives beyond zip64 practical limits\"\r\nRandomness seeded to: 3223785517\r\n===============================================================================\r\nAll tests passed (4 assertions in 1 test case)\r\n\r\n"]
+[0.001, "o", "\r\n--- segment pause ---\r\n"]
+[3.003, "x", "0"]

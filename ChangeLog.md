@@ -3,6 +3,10 @@
 ### Unreleased
 
  - Add tdefl_write_image_to_png_file_in_memory_ex2() for writing indexed PNGs (PLTE/tRNS chunks), based on SDL commit 1fa6475
+ - Automatically switch to ZIP64 when finalizing an archive that grew past the classic ZIP limits (4GB size or 65535 files) instead of failing
+ - Automatically switch to ZIP64 in mz_zip_writer_add_from_zip_reader() when the file count or estimated archive size exceeds the classic ZIP limits, instead of failing
+ - Allow mz_zip_writer_add_from_zip_reader() to copy from ZIP64 source archives by switching the destination archive to ZIP64, instead of failing
+ - Return MZ_ZIP_UNSUPPORTED_CDIR_SIZE (instead of MZ_ZIP_TOO_MANY_FILES) when the central directory grows beyond 4GB while finalizing a ZIP64 archive
 
 ### 3.1.2
 

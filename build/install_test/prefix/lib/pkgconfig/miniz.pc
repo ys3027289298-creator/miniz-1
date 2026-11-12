@@ -1,0 +1,13 @@
+prefix=/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/prefix
+exec_prefix=${prefix}
+libdir=${exec_prefix}/lib
+includedir=${prefix}/headers/miniz
+
+Name: miniz
+Description: 
+Version: 3.1.2
+URL: 
+
+Requires:
+Libs: -L${libdir} -lminiz
+Cflags: -I${includedir}

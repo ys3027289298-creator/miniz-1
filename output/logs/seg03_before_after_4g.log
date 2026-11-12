@@ -1,0 +1,31 @@
+
+================================================================
+  Segment 3/7: archive crossing 4GB - before (fails) vs after (auto ZIP64)
+================================================================
+
+Preparing worktree (detached HEAD 2c50092)
+HEAD is now at 2c50092 Merge pull request #399 from richgel999/indexed-png
+* test assets: two sparse files, 2GB + 3GB (each < 4GB, sum > 4GB)
+-rw-r--r-- 1 ys ys 2.0G Nov 13 02:35 /tmp/mzdemo/part1.bin
+-rw-r--r-- 1 ys ys 3.0G Nov 13 02:35 /tmp/mzdemo/part2.bin
+
+* BEFORE (pristine HEAD): finalize used to fail past 4GB
+archive size before finalize: 5368709230 bytes (>4GB)
+finalize FAILED: too many files
+exit code: 1
+
+* AFTER (with fix): finalize automatically switches to ZIP64
+finalize OK, archive is zip64: 1
+	Maximum resident set size (kbytes): 1836
+
+* read the fixed archive back with miniz
+files=2 zip64=1
+part1.bin size=2147483648 crc=4dbdf21c
+part2.bin size=3221225472 crc=480bbe37
+
+* read the same archive with python's zipfile (independent implementation)
+  part1.bin size=2147483648
+  part2.bin size=3221225472
+  python zipfile: OK
+
+--- segment pause ---

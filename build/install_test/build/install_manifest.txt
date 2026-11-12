@@ -1,0 +1,13 @@
+/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/prefix/lib/pkgconfig/miniz.pc
+/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/prefix/lib/libminiz.a
+/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/prefix/lib/cmake/miniz/minizTargets.cmake
+/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/prefix/lib/cmake/miniz/minizTargets-release.cmake
+/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/prefix/lib/cmake/miniz/minizConfig.cmake
+/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/prefix/lib/cmake/miniz/minizConfigVersion.cmake
+/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/prefix/headers/miniz/miniz.h
+/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/prefix/headers/miniz/miniz_common.h
+/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/prefix/headers/miniz/miniz_export.h
+/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/prefix/headers/miniz/miniz_tdef.h
+/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/prefix/headers/miniz/miniz_tinfl.h
+/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/prefix/headers/miniz/miniz_zip.h
+/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/prefix/headers/miniz/miniz_export.h

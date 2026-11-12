@@ -1,0 +1,1 @@
+/usr/bin/cc  -Wshadow -Wformat=2 -Wall -Wno-overlength-strings -pedantic -O3 -DNDEBUG CMakeFiles/png_roundtrip_gen.dir/tests/png_roundtrip_gen.c.o -o /home/ys/feedback/uidreczz28Ypc2VLEbr/bin/png_roundtrip_gen  libminiz.a 

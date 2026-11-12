@@ -1,0 +1,33 @@
+Start testing: Nov 13 02:34 CST
+----------------------------------------------------------
+1/2 Testing: plain
+1/2 Test: plain
+Command: "/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/consumer/plain"
+Directory: /home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/consumer
+"plain" start time: Nov 13 02:34 CST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"plain" end time: Nov 13 02:34 CST
+"plain" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/2 Testing: subdir
+2/2 Test: subdir
+Command: "/home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/consumer/subdir"
+Directory: /home/ys/feedback/uidreczz28Ypc2VLEbr/build/install_test/consumer
+"subdir" start time: Nov 13 02:34 CST
+Output:
+----------------------------------------------------------
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"subdir" end time: Nov 13 02:34 CST
+"subdir" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Nov 13 02:34 CST
