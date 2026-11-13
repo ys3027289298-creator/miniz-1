@@ -2,6 +2,7 @@
 
 ### Unreleased
 
+ - Add ZIP reader support for LZMA (method 14) entries across all extraction paths (memory, callback, file, iterator), decoded through the system liblzma which is loaded lazily at runtime (define MINIZ_NO_LZMA to compile this out). CRC-32 is always verified. Unsupported LZMA property subtypes fail with MZ_ZIP_UNSUPPORTED_FEATURE, distinct from MZ_ZIP_UNSUPPORTED_METHOD for other unknown methods
  - Add tdefl_write_image_to_png_file_in_memory_ex2() for writing indexed PNGs (PLTE/tRNS chunks), based on SDL commit 1fa6475
 
 ### 3.1.2

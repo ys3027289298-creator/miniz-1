@@ -1,0 +1,11 @@
+{"version":3,"term":{"cols":80,"rows":24},"timestamp":1794547851,"idle_time_limit":3.0,"command":"bash output/verify/seg4_crc.sh","title":"4/6 Checksum failure detection","env":{"SHELL":"/bin/bash"}}
+[0.009, "o", "=====================================================\r\n Segment 4/6: Checksum failure detection (corrupt zips)\r\n=====================================================\r\n"]
+[1.003, "o", "+ ./miniz_tester r output/verify/bad   (every archive must fail)\r\n"]
+[0.003, "o", "Error: Failed extracting file from archive \"output/verify/bad/lzma_badcrc.zip\": unexpected decompressed size\r\nError: Failed processing archive \"output/verify/bad/lzma_badcrc.zip\"!\r\nError: Failed extracting file from archive \"output/verify/bad/lzma_badprops.zip\": unsupported feature\r\nError: Failed processing archive \"output/verify/bad/lzma_badprops.zip\"!\r\nError: Failed extracting file from archive \"output/verify/bad/lzma_corrupt.zip\": decompression failed or archive is corrupted\r\nError: Failed processing archive \"output/verify/bad/lzma_corrupt.zip\"!\r\n"]
+[0.000, "o", "***** [1 of 4] Testing archive file \"output/verify/bad/lzma_badcrc.zip\"\r\n***** [2 of 4] Testing archive file \"output/verify/bad/bzip2.zip\"\r\n***** [3 of 4] Testing archive file \"output/verify/bad/lzma_badprops.zip\"\r\n***** [4 of 4] Testing archive file \"output/verify/bad/lzma_corrupt.zip\"\r\nTotal errors: 3"]
+[0.000, "o", "\r\n"]
+[0.000, "o", "\r\n+ bin/catch_tests \"Zip reader LZMA tests\" -c \"LZMA CRC-32 mismatch is detected\" -s\r\n"]
+[0.003, "o", "All tests passed (3 assertions in 1 test case)\r\n\r\n"]
+[0.000, "o", "\r\n+ bin/catch_tests \"Zip reader LZMA tests\" -c \"Corrupted LZMA data is detected\"\r\n"]
+[0.003, "o", "All tests passed (3 assertions in 1 test case)\r\n\r\n"]
+[1.007, "x", "0"]

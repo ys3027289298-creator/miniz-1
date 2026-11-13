@@ -501,6 +501,236 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
         return MZ_FALSE;
     }
 
+    /* ZIP LZMA (method 14) support. The decoder is provided by the system's liblzma, which is
+       loaded lazily at runtime so miniz stays self-contained and builds identically to before.
+       Define MINIZ_NO_LZMA to compile this support out completely. */
+#if !defined(MINIZ_NO_LZMA) && !defined(_WIN32) && (defined(__unix__) || defined(__unix) || defined(__APPLE__))
+#define MINIZ_ZIP_HAS_LZMA 1
+#else
+#define MINIZ_ZIP_HAS_LZMA 0
+#endif
+
+#if MINIZ_ZIP_HAS_LZMA
+
+#include <dlfcn.h>
+
+    /* Minimal liblzma ABI declarations, so no liblzma headers or link-time dependencies are needed. */
+    typedef struct
+    {
+        mz_uint32 dict_size;
+        const mz_uint8 *preset_dict;
+        mz_uint32 preset_dict_size;
+        mz_uint32 lc, lp, pb;
+        int mode;
+        mz_uint32 nice_len;
+        int mf;
+        mz_uint32 depth;
+        mz_uint32 ext_flags;
+        mz_uint32 ext_size_low;
+        mz_uint32 ext_size_high;
+        mz_uint32 reserved_int4, reserved_int5, reserved_int6, reserved_int7, reserved_int8;
+        int reserved_enum1, reserved_enum2, reserved_enum3, reserved_enum4;
+        void *reserved_ptr1, *reserved_ptr2;
+    } mz_lzma_options_lzma;
+
+    typedef struct
+    {
+        mz_uint64 id;
+        void *options;
+    } mz_lzma_filter;
+
+    typedef struct
+    {
+        const mz_uint8 *next_in;
+        size_t avail_in;
+        mz_uint64 total_in;
+        mz_uint8 *next_out;
+        size_t avail_out;
+        mz_uint64 total_out;
+        void *allocator;
+        void *internal;
+        void *reserved_ptr1;
+        void *reserved_ptr2;
+        void *reserved_ptr3;
+        void *reserved_ptr4;
+        mz_uint64 reserved_int1;
+        mz_uint64 reserved_int2;
+        size_t reserved_int3;
+        size_t reserved_int4;
+        int reserved_enum1;
+        int reserved_enum2;
+    } mz_lzma_stream;
+
+    #define MZ_LZMA_RET_OK 0
+    #define MZ_LZMA_RET_STREAM_END 1
+    #define MZ_LZMA_ACTION_RUN 0
+    #define MZ_LZMA_FILTER_LZMA1 (((mz_uint64)0x1) << 62 | 1)
+    #define MZ_LZMA_FILTER_END (~(mz_uint64)0)
+
+    typedef int (*mz_lzma_lzma_preset_func)(mz_lzma_options_lzma *options, mz_uint32 preset);
+    typedef int (*mz_lzma_raw_decoder_func)(mz_lzma_stream *strm, const mz_lzma_filter *filters);
+    typedef int (*mz_lzma_code_func)(mz_lzma_stream *strm, int action);
+    typedef void (*mz_lzma_end_func)(mz_lzma_stream *strm);
+
+    static mz_lzma_lzma_preset_func mz_lzma_lzma_preset_ptr;
+    static mz_lzma_raw_decoder_func mz_lzma_raw_decoder_ptr;
+    static mz_lzma_code_func mz_lzma_code_ptr;
+    static mz_lzma_end_func mz_lzma_end_ptr;
+    static int mz_lzma_load_state; /* 0 = not tried yet, 1 = available, -1 = unavailable */
+
+    static mz_bool mz_zip_lzma_load(void)
+    {
+        void *handle;
+
+        if (mz_lzma_load_state)
+            return (mz_lzma_load_state > 0) ? MZ_TRUE : MZ_FALSE;
+
+        handle = dlopen("liblzma.so.5", RTLD_NOW | RTLD_LOCAL);
+        if (!handle)
+            handle = dlopen("liblzma.so", RTLD_NOW | RTLD_LOCAL);
+
+        if (handle)
+        {
+            *(void **)(&mz_lzma_lzma_preset_ptr) = dlsym(handle, "lzma_lzma_preset");
+            *(void **)(&mz_lzma_raw_decoder_ptr) = dlsym(handle, "lzma_raw_decoder");
+            *(void **)(&mz_lzma_code_ptr) = dlsym(handle, "lzma_code");
+            *(void **)(&mz_lzma_end_ptr) = dlsym(handle, "lzma_end");
+        }
+
+        mz_lzma_load_state = (handle && mz_lzma_lzma_preset_ptr && mz_lzma_raw_decoder_ptr && mz_lzma_code_ptr && mz_lzma_end_ptr) ? 1 : -1;
+        return (mz_lzma_load_state > 0) ? MZ_TRUE : MZ_FALSE;
+    }
+
+    /* Decompresses a ZIP LZMA (method 14) data stream: 2 version bytes, 2 byte little-endian
+       properties size, properties blob, then the raw LZMA1 stream. The CRC-32 check itself is
+       left to the caller, exactly like the deflate paths. */
+    static mz_bool mz_zip_reader_lzma_decompress(mz_zip_archive *pZip, const mz_uint8 *pComp, mz_uint64 comp_size64, mz_uint8 *pOut, mz_uint64 out_size64)
+    {
+        mz_uint16 props_size;
+        mz_lzma_options_lzma options;
+        mz_lzma_filter filters[2];
+        mz_lzma_stream strm;
+        size_t comp_size, out_size;
+        int ret, props_byte;
+
+        if (comp_size64 < 4)
+            return mz_zip_set_error(pZip, MZ_ZIP_INVALID_HEADER_OR_CORRUPTED);
+
+        props_size = MZ_READ_LE16(pComp + 2);
+
+        /* The only ZIP LZMA properties subtype we (and liblzma) understand: 1 lc/lp/pb byte + 4 byte dictionary size. */
+        if (props_size != 5)
+            return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_FEATURE);
+
+        if (comp_size64 < (mz_uint64)(4 + props_size))
+            return mz_zip_set_error(pZip, MZ_ZIP_INVALID_HEADER_OR_CORRUPTED);
+
+        if (((sizeof(size_t) == sizeof(mz_uint32))) && ((comp_size64 > 0x7FFFFFFF) || (out_size64 > 0x7FFFFFFF)))
+            return mz_zip_set_error(pZip, MZ_ZIP_FILE_TOO_LARGE);
+
+        if (!mz_zip_lzma_load())
+            return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_FEATURE);
+
+        comp_size = (size_t)comp_size64;
+        out_size = (size_t)out_size64;
+
+        memset(&options, 0, sizeof(options));
+        mz_lzma_lzma_preset_ptr(&options, 6);
+
+        props_byte = pComp[4];
+        options.lc = (mz_uint32)(props_byte % 9);
+        options.lp = (mz_uint32)((props_byte / 9) % 5);
+        options.pb = (mz_uint32)(props_byte / 45);
+        options.dict_size = MZ_READ_LE32(pComp + 5);
+
+        filters[0].id = MZ_LZMA_FILTER_LZMA1;
+        filters[0].options = &options;
+        filters[1].id = MZ_LZMA_FILTER_END;
+        filters[1].options = NULL;
+
+        memset(&strm, 0, sizeof(strm));
+        strm.next_in = pComp + 4 + props_size;
+        strm.avail_in = comp_size - 4 - props_size;
+        strm.next_out = pOut;
+        strm.avail_out = out_size;
+
+        ret = mz_lzma_raw_decoder_ptr(&strm, filters);
+        if (ret != MZ_LZMA_RET_OK)
+            return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_FEATURE);
+
+        /* Feed the whole stream with LZMA_RUN so entries both with and without an end-of-stream marker decode correctly. */
+        do
+        {
+            ret = mz_lzma_code_ptr(&strm, MZ_LZMA_ACTION_RUN);
+        } while ((ret == MZ_LZMA_RET_OK) && (strm.avail_in) && (strm.avail_out));
+
+        mz_lzma_end_ptr(&strm);
+
+        if ((ret != MZ_LZMA_RET_OK) && (ret != MZ_LZMA_RET_STREAM_END))
+            return mz_zip_set_error(pZip, MZ_ZIP_DECOMPRESSION_FAILED);
+
+        if (strm.total_out != out_size64)
+            return mz_zip_set_error(pZip, MZ_ZIP_UNEXPECTED_DECOMPRESSED_SIZE);
+
+        return MZ_TRUE;
+    }
+
+    /* Reads the compressed data of an LZMA entry (from memory or file) and decompresses it into pOut.
+       When pUser_read_buf is supplied it is used instead of allocating, honoring the no_alloc contract. */
+    static mz_bool mz_zip_reader_lzma_read_and_decompress(mz_zip_archive *pZip, mz_uint64 cur_file_ofs, mz_uint64 comp_size, mz_uint8 *pOut, mz_uint64 out_size, void *pUser_read_buf, size_t user_read_buf_size)
+    {
+        mz_bool status;
+
+        if (pZip->m_pState->m_pMem)
+        {
+            return mz_zip_reader_lzma_decompress(pZip, (const mz_uint8 *)pZip->m_pState->m_pMem + cur_file_ofs, comp_size, pOut, out_size);
+        }
+
+        if (pUser_read_buf)
+        {
+            if ((mz_uint64)user_read_buf_size < comp_size)
+                return mz_zip_set_error(pZip, MZ_ZIP_BUF_TOO_SMALL);
+
+            if (pZip->m_pRead(pZip->m_pIO_opaque, cur_file_ofs, pUser_read_buf, (size_t)comp_size) != comp_size)
+                return mz_zip_set_error(pZip, MZ_ZIP_FILE_READ_FAILED);
+
+            return mz_zip_reader_lzma_decompress(pZip, (const mz_uint8 *)pUser_read_buf, comp_size, pOut, out_size);
+        }
+
+        if ((sizeof(size_t) == sizeof(mz_uint32)) && (comp_size > 0x7FFFFFFF))
+            return mz_zip_set_error(pZip, MZ_ZIP_INTERNAL_ERROR);
+
+        {
+            void *pComp_buf = pZip->m_pAlloc(pZip->m_pAlloc_opaque, 1, (size_t)comp_size);
+            if (!pComp_buf)
+                return mz_zip_set_error(pZip, MZ_ZIP_ALLOC_FAILED);
+
+            if (pZip->m_pRead(pZip->m_pIO_opaque, cur_file_ofs, pComp_buf, (size_t)comp_size) != comp_size)
+            {
+                pZip->m_pFree(pZip->m_pAlloc_opaque, pComp_buf);
+                return mz_zip_set_error(pZip, MZ_ZIP_FILE_READ_FAILED);
+            }
+
+            status = mz_zip_reader_lzma_decompress(pZip, (const mz_uint8 *)pComp_buf, comp_size, pOut, out_size);
+            pZip->m_pFree(pZip->m_pAlloc_opaque, pComp_buf);
+        }
+
+        return status;
+    }
+
+#endif /* MINIZ_ZIP_HAS_LZMA */
+
+    static mz_bool mz_zip_reader_is_method_supported(mz_uint method)
+    {
+        if ((method == 0) || (method == MZ_DEFLATED))
+            return MZ_TRUE;
+#if MINIZ_ZIP_HAS_LZMA
+        if (method == MZ_ZIP_METHOD_LZMA)
+            return MZ_TRUE;
+#endif
+        return MZ_FALSE;
+    }
+
     static mz_bool mz_zip_reader_init_internal(mz_zip_archive *pZip, mz_uint flags)
     {
         (void)flags;
@@ -1242,7 +1472,7 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
         method = MZ_READ_LE16(p + MZ_ZIP_CDH_METHOD_OFS);
         bit_flag = MZ_READ_LE16(p + MZ_ZIP_CDH_BIT_FLAG_OFS);
 
-        if ((method != 0) && (method != MZ_DEFLATED))
+        if (!mz_zip_reader_is_method_supported(method))
         {
             mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_METHOD);
             return MZ_FALSE;
@@ -1585,8 +1815,8 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
         if (file_stat.m_bit_flag & (MZ_ZIP_GENERAL_PURPOSE_BIT_FLAG_IS_ENCRYPTED | MZ_ZIP_GENERAL_PURPOSE_BIT_FLAG_USES_STRONG_ENCRYPTION | MZ_ZIP_GENERAL_PURPOSE_BIT_FLAG_COMPRESSED_PATCH_FLAG))
             return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_ENCRYPTION);
 
-        /* This function only supports decompressing stored and deflate. */
-        if ((!(flags & MZ_ZIP_FLAG_COMPRESSED_DATA)) && (file_stat.m_method != 0) && (file_stat.m_method != MZ_DEFLATED))
+        /* This function only supports decompressing stored, deflate and LZMA. */
+        if ((!(flags & MZ_ZIP_FLAG_COMPRESSED_DATA)) && (!mz_zip_reader_is_method_supported(file_stat.m_method)))
             return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_METHOD);
 
         /* Ensure supplied output buffer is large enough. */
@@ -1622,6 +1852,21 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
 
             return MZ_TRUE;
         }
+
+#if MINIZ_ZIP_HAS_LZMA
+        if (file_stat.m_method == MZ_ZIP_METHOD_LZMA)
+        {
+            if (!mz_zip_reader_lzma_read_and_decompress(pZip, cur_file_ofs, file_stat.m_comp_size, (mz_uint8 *)pBuf, file_stat.m_uncomp_size, pUser_read_buf, user_read_buf_size))
+                return MZ_FALSE;
+
+#ifndef MINIZ_DISABLE_ZIP_READER_CRC32_CHECKS
+            if (mz_crc32(MZ_CRC32_INIT, (const mz_uint8 *)pBuf, (size_t)file_stat.m_uncomp_size) != file_stat.m_crc32)
+                return mz_zip_set_error(pZip, MZ_ZIP_CRC_CHECK_FAILED);
+#endif /* MINIZ_DISABLE_ZIP_READER_CRC32_CHECKS */
+
+            return MZ_TRUE;
+        }
+#endif /* MINIZ_ZIP_HAS_LZMA */
 
         /* Decompress the file either directly from memory or from a file input buffer. */
         tinfl_init(&inflator);
@@ -1802,8 +2047,8 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
         if (file_stat.m_bit_flag & (MZ_ZIP_GENERAL_PURPOSE_BIT_FLAG_IS_ENCRYPTED | MZ_ZIP_GENERAL_PURPOSE_BIT_FLAG_USES_STRONG_ENCRYPTION | MZ_ZIP_GENERAL_PURPOSE_BIT_FLAG_COMPRESSED_PATCH_FLAG))
             return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_ENCRYPTION);
 
-        /* This function only supports decompressing stored and deflate. */
-        if ((!(flags & MZ_ZIP_FLAG_COMPRESSED_DATA)) && (file_stat.m_method != 0) && (file_stat.m_method != MZ_DEFLATED))
+        /* This function only supports decompressing stored, deflate and LZMA. */
+        if ((!(flags & MZ_ZIP_FLAG_COMPRESSED_DATA)) && (!mz_zip_reader_is_method_supported(file_stat.m_method)))
             return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_METHOD);
 
         /* Read and do some minimal validation of the local directory entry (this doesn't crack the zip64 stuff, which we already have from the central dir) */
@@ -1891,6 +2136,53 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
                 }
             }
         }
+#if MINIZ_ZIP_HAS_LZMA
+        else if (file_stat.m_method == MZ_ZIP_METHOD_LZMA)
+        {
+            /* LZMA is decoded in one shot to a temporary buffer, then handed to the callback in chunks. */
+            mz_uint8 *pLzma_buf;
+
+            if (((sizeof(size_t) == sizeof(mz_uint32))) && (file_stat.m_uncomp_size > 0x7FFFFFFF))
+            {
+                mz_zip_set_error(pZip, MZ_ZIP_INTERNAL_ERROR);
+                status = TINFL_STATUS_FAILED;
+            }
+            else if (NULL == (pLzma_buf = (mz_uint8 *)pZip->m_pAlloc(pZip->m_pAlloc_opaque, 1, (size_t)MZ_MAX(file_stat.m_uncomp_size, 1))))
+            {
+                mz_zip_set_error(pZip, MZ_ZIP_ALLOC_FAILED);
+                status = TINFL_STATUS_FAILED;
+            }
+            else
+            {
+                if (!mz_zip_reader_lzma_read_and_decompress(pZip, cur_file_ofs, file_stat.m_comp_size, pLzma_buf, file_stat.m_uncomp_size, NULL, 0))
+                {
+                    status = TINFL_STATUS_FAILED;
+                }
+                else
+                {
+                    while (out_buf_ofs < file_stat.m_uncomp_size)
+                    {
+                        size_t chunk_size = (size_t)MZ_MIN((mz_uint64)MZ_ZIP_MAX_IO_BUF_SIZE, file_stat.m_uncomp_size - out_buf_ofs);
+
+                        if (pCallback(pOpaque, out_buf_ofs, pLzma_buf + out_buf_ofs, chunk_size) != chunk_size)
+                        {
+                            mz_zip_set_error(pZip, MZ_ZIP_WRITE_CALLBACK_FAILED);
+                            status = TINFL_STATUS_FAILED;
+                            break;
+                        }
+
+#ifndef MINIZ_DISABLE_ZIP_READER_CRC32_CHECKS
+                        file_crc32 = (mz_uint32)mz_crc32(file_crc32, pLzma_buf + out_buf_ofs, chunk_size);
+#endif /* MINIZ_DISABLE_ZIP_READER_CRC32_CHECKS */
+
+                        out_buf_ofs += chunk_size;
+                    }
+                }
+
+                pZip->m_pFree(pZip->m_pAlloc_opaque, pLzma_buf);
+            }
+        }
+#endif /* MINIZ_ZIP_HAS_LZMA */
         else
         {
             tinfl_decompressor inflator;
@@ -2017,8 +2309,8 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
             return NULL;
         }
 
-        /* This function only supports decompressing stored and deflate. */
-        if ((!(flags & MZ_ZIP_FLAG_COMPRESSED_DATA)) && (pState->file_stat.m_method != 0) && (pState->file_stat.m_method != MZ_DEFLATED))
+        /* This function only supports decompressing stored, deflate and LZMA. */
+        if ((!(flags & MZ_ZIP_FLAG_COMPRESSED_DATA)) && (!mz_zip_reader_is_method_supported(pState->file_stat.m_method)))
         {
             mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_METHOD);
             pZip->m_pFree(pZip->m_pAlloc_opaque, pState);
@@ -2095,17 +2387,52 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
 
         if (!((flags & MZ_ZIP_FLAG_COMPRESSED_DATA) || (!pState->file_stat.m_method)))
         {
-            /* Decompression required, init decompressor */
-            tinfl_init(&pState->inflator);
-
-            /* Allocate write buffer */
-            if (NULL == (pState->pWrite_buf = pZip->m_pAlloc(pZip->m_pAlloc_opaque, 1, TINFL_LZ_DICT_SIZE)))
+#if MINIZ_ZIP_HAS_LZMA
+            if (pState->file_stat.m_method == MZ_ZIP_METHOD_LZMA)
             {
-                mz_zip_set_error(pZip, MZ_ZIP_ALLOC_FAILED);
-                if (pState->pRead_buf && !pZip->m_pState->m_pMem)
-                    pZip->m_pFree(pZip->m_pAlloc_opaque, pState->pRead_buf);
-                pZip->m_pFree(pZip->m_pAlloc_opaque, pState);
-                return NULL;
+                /* LZMA is fully decoded up front; mz_zip_reader_extract_iter_read() serves it from pWrite_buf. */
+                if (((sizeof(size_t) == sizeof(mz_uint32))) && (pState->file_stat.m_uncomp_size > 0x7FFFFFFF))
+                {
+                    mz_zip_set_error(pZip, MZ_ZIP_INTERNAL_ERROR);
+                    if (pState->pRead_buf && !pZip->m_pState->m_pMem)
+                        pZip->m_pFree(pZip->m_pAlloc_opaque, pState->pRead_buf);
+                    pZip->m_pFree(pZip->m_pAlloc_opaque, pState);
+                    return NULL;
+                }
+
+                if (NULL == (pState->pWrite_buf = pZip->m_pAlloc(pZip->m_pAlloc_opaque, 1, (size_t)MZ_MAX(pState->file_stat.m_uncomp_size, 1))))
+                {
+                    mz_zip_set_error(pZip, MZ_ZIP_ALLOC_FAILED);
+                    if (pState->pRead_buf && !pZip->m_pState->m_pMem)
+                        pZip->m_pFree(pZip->m_pAlloc_opaque, pState->pRead_buf);
+                    pZip->m_pFree(pZip->m_pAlloc_opaque, pState);
+                    return NULL;
+                }
+
+                if (!mz_zip_reader_lzma_read_and_decompress(pZip, pState->cur_file_ofs, pState->file_stat.m_comp_size, (mz_uint8 *)pState->pWrite_buf, pState->file_stat.m_uncomp_size, NULL, 0))
+                {
+                    if (pState->pRead_buf && !pZip->m_pState->m_pMem)
+                        pZip->m_pFree(pZip->m_pAlloc_opaque, pState->pRead_buf);
+                    pZip->m_pFree(pZip->m_pAlloc_opaque, pState->pWrite_buf);
+                    pZip->m_pFree(pZip->m_pAlloc_opaque, pState);
+                    return NULL;
+                }
+            }
+            else
+#endif /* MINIZ_ZIP_HAS_LZMA */
+            {
+                /* Decompression required, init decompressor */
+                tinfl_init(&pState->inflator);
+
+                /* Allocate write buffer */
+                if (NULL == (pState->pWrite_buf = pZip->m_pAlloc(pZip->m_pAlloc_opaque, 1, TINFL_LZ_DICT_SIZE)))
+                {
+                    mz_zip_set_error(pZip, MZ_ZIP_ALLOC_FAILED);
+                    if (pState->pRead_buf && !pZip->m_pState->m_pMem)
+                        pZip->m_pFree(pZip->m_pAlloc_opaque, pState->pRead_buf);
+                    pZip->m_pFree(pZip->m_pAlloc_opaque, pState);
+                    return NULL;
+                }
             }
         }
 
@@ -2167,6 +2494,21 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
             pState->out_buf_ofs += copied_to_caller;
             pState->comp_remaining -= copied_to_caller;
         }
+#if MINIZ_ZIP_HAS_LZMA
+        else if (pState->file_stat.m_method == MZ_ZIP_METHOD_LZMA)
+        {
+            /* The file was fully decompressed when the iterator was created, serve it from pWrite_buf. */
+            copied_to_caller = (size_t)MZ_MIN((mz_uint64)buf_size, pState->file_stat.m_uncomp_size - pState->out_buf_ofs);
+
+            memcpy(pvBuf, (const mz_uint8 *)pState->pWrite_buf + pState->out_buf_ofs, copied_to_caller);
+
+#ifndef MINIZ_DISABLE_ZIP_READER_CRC32_CHECKS
+            pState->file_crc32 = (mz_uint32)mz_crc32(pState->file_crc32, (const mz_uint8 *)pvBuf, copied_to_caller);
+#endif /* MINIZ_DISABLE_ZIP_READER_CRC32_CHECKS */
+
+            pState->out_buf_ofs += copied_to_caller;
+        }
+#endif /* MINIZ_ZIP_HAS_LZMA */
         else
         {
             do
@@ -2404,8 +2746,8 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
         if (file_stat.m_is_encrypted)
             return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_ENCRYPTION);
 
-        /* This function only supports stored and deflate. */
-        if ((file_stat.m_method != 0) && (file_stat.m_method != MZ_DEFLATED))
+        /* This function only supports stored, deflate and LZMA. */
+        if (!mz_zip_reader_is_method_supported(file_stat.m_method))
             return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_METHOD);
 
         if (!file_stat.m_is_supported)

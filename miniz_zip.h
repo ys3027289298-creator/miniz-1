@@ -19,6 +19,9 @@ extern "C"
         MZ_ZIP_MAX_ARCHIVE_FILE_COMMENT_SIZE = 512
     };
 
+    /* Compression method numbers understood by the ZIP reader, in addition to 0 (stored) and MZ_DEFLATED. */
+#define MZ_ZIP_METHOD_LZMA 14
+
     typedef struct
     {
         /* Central directory file index. */

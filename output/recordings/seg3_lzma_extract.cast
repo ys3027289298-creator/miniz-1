@@ -1,0 +1,11 @@
+{"version":3,"term":{"cols":80,"rows":24},"timestamp":1794547846,"idle_time_limit":3.0,"command":"bash output/verify/seg3_lzma_extract.sh","title":"3/6 LZMA extraction matches reference","env":{"SHELL":"/bin/bash"}}
+[0.010, "o", "==========================================================\r\n Segment 3/6: LZMA extraction matches the reference (zipfile)\r\n==========================================================\r\n"]
+[1.022, "o", "+ ./miniz_tester r output/verify/good   (all reader paths: heap/callback/iter)\r\n"]
+[0.008, "o", "***** [1 of 2] Testing archive file \"output/verify/good/deflate.zip\"\r\n***** [2 of 2] Testing archive file \"output/verify/good/lzma.zip\"\r\nTotal archives processed: 2\r\nTotal errors: 0\r\nTotal bytes processed: 3892\r\nTotal archive files processed: 4\r\n"]
+[0.000, "o", "\r\n+ bin/catch_tests \"Zip reader LZMA tests\" -c \"LZMA entries decompress correctly through all reader paths\"\r\n"]
+[0.003, "o", "All tests passed (19 assertions in 1 test case)\r\n\r\n"]
+[0.000, "o", "\r\n+ bin/catch_tests \"Zip reader LZMA tests\" -c \"LZMA entries extract correctly from file archives\"\r\n"]
+[0.003, "o", "All tests passed (7 assertions in 1 test case)\r\n\r\n"]
+[0.000, "o", "\r\n+ reference side: python zipfile re-extracts test.bin, compare with the payload miniz was checked against\r\n"]
+[0.023, "o", "  reference payload sha256: d075d52f010c4945ed3b7746b9bf3ec5\r\n  zipfile extract  sha256: d075d52f010c4945ed3b7746b9bf3ec5\r\n  reference extract == payload: True\r\n  (miniz output was memcmp-verified against the same payload by catch_tests)\r\n"]
+[1.007, "x", "0"]

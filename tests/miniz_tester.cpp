@@ -1491,7 +1491,7 @@ static bool test_archives(const char *pPath, comp_options options)
         }
       }
 
-      if ((file_stat.m_method) && (file_stat.m_method != MZ_DEFLATED))
+      if ((file_stat.m_method) && (file_stat.m_method != MZ_DEFLATED) && (file_stat.m_method != MZ_ZIP_METHOD_LZMA))
         continue;
 
       if (status)
@@ -1536,7 +1536,10 @@ static bool test_archives(const char *pPath, comp_options options)
       }
 
       if (!status)
+      {
+        print_error("Failed extracting file from archive \"%s\": %s\n", src_file.c_str(), mz_zip_get_error_string(mz_zip_peek_last_error(&src_archive)));
         break;
+      }
     }
 
     mz_zip_reader_end(&src_archive);

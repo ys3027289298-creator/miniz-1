@@ -1,0 +1,12 @@
+{"version":3,"term":{"cols":80,"rows":24},"timestamp":1794547842,"idle_time_limit":3.0,"command":"bash output/verify/seg2_assets.sh","title":"2/6 Create small test assets","env":{"SHELL":"/bin/bash"}}
+[0.008, "o", "==================================================\r\n Segment 2/6: Create small LZMA/deflate test assets\r\n==================================================\r\n"]
+[1.004, "o", "+ python3 output/tools/make_assets.py\r\n"]
+[0.036, "o", "bzip2.zip: 598 bytes\r\ncontent.bin: 1920 bytes\r\ndeflate.zip: 432 bytes\r\nlzma.zip: 441 bytes\r\nlzma_badcrc.zip: 441 bytes\r\n"]
+[0.000, "o", "lzma_badprops.zip: 441 bytes\r\nlzma_corrupt.zip: 441 bytes\r\nwrote /home/ys/feedback/uidreczz28Z0cqjf3r2/tests/lzma_test_data.h\r\n"]
+[0.013, "o", "+ ls -l output/assets\r\n"]
+[0.003, "o", "total 28\r\n-rw-r--r-- 1 ys ys  598 Nov 13 13:30 bzip2.zip\r\n-rw-r--r-- 1 ys ys 1920 Nov 13 13:30 content.bin\r\n-rw-r--r-- 1 ys ys  432 Nov 13 13:30 deflate.zip\r\n-rw-r--r-- 1 ys ys  441 Nov 13 13:30 lzma.zip\r\n-rw-r--r-- 1 ys ys  441 Nov 13 13:30 lzma_badcrc.zip\r\n"]
+[0.000, "o", "-rw-r--r-- 1 ys ys  441 Nov 13 13:30 lzma_badprops.zip\r\n"]
+[0.000, "o", "-rw-r--r-- 1 ys ys  441 Nov 13 13:30 lzma_corrupt.zip\r\n"]
+[0.000, "o", "+ compression method of test.bin inside lzma.zip:\r\n"]
+[0.020, "o", "  test.bin   method=14 csize=197  usize=1920\r\n  note.txt   method=0  csize=26   usize=26\r\n"]
+[1.014, "x", "0"]

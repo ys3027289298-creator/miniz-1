@@ -299,6 +299,165 @@ TEST_CASE("Zip reader tests")
 
 #endif /* MINIZ_NO_STDIO */
 
+#if !defined(MINIZ_NO_LZMA) && !defined(_WIN32) && (defined(__unix__) || defined(__unix) || defined(__APPLE__))
+#define MINIZ_TEST_HAS_LZMA 1
+#endif
+
+#ifdef MINIZ_TEST_HAS_LZMA
+#include "lzma_test_data.h"
+
+struct lzma_cb_context
+{
+    std::vector<unsigned char> data;
+};
+
+static size_t lzma_test_write_callback(void *opaque, mz_uint64 ofs, const void *buf, size_t n)
+{
+    (void)ofs;
+    auto *context = static_cast<lzma_cb_context *>(opaque);
+    const auto *bytes = static_cast<const unsigned char *>(buf);
+    context->data.insert(context->data.end(), bytes, bytes + n);
+    return n;
+}
+
+TEST_CASE("Zip reader LZMA tests")
+{
+    const size_t content_size = sizeof(k_lzma_content);
+
+    SECTION("LZMA entries decompress correctly through all reader paths")
+    {
+        mz_zip_archive zip_archive = {};
+        REQUIRE(mz_zip_reader_init_mem(&zip_archive, k_lzma_zip, sizeof(k_lzma_zip), 0));
+        REQUIRE(mz_zip_reader_get_num_files(&zip_archive) == 2);
+
+        mz_zip_archive_file_stat file_stat;
+        REQUIRE(mz_zip_reader_file_stat(&zip_archive, 0, &file_stat));
+        REQUIRE(file_stat.m_method == MZ_ZIP_METHOD_LZMA);
+        REQUIRE(file_stat.m_uncomp_size == content_size);
+        REQUIRE(mz_zip_reader_is_file_supported(&zip_archive, 0));
+
+        /* Heap extraction */
+        size_t extracted_size = 0;
+        void *p = mz_zip_reader_extract_to_heap(&zip_archive, 0, &extracted_size, 0);
+        REQUIRE(p != nullptr);
+        REQUIRE(extracted_size == content_size);
+        REQUIRE(memcmp(p, k_lzma_content, content_size) == 0);
+        free(p);
+
+        /* Callback extraction */
+        lzma_cb_context context;
+        REQUIRE(mz_zip_reader_extract_to_callback(&zip_archive, 0, lzma_test_write_callback, &context, 0));
+        REQUIRE(context.data.size() == content_size);
+        REQUIRE(memcmp(context.data.data(), k_lzma_content, content_size) == 0);
+
+        /* Iterator extraction, in odd-sized chunks */
+        mz_zip_reader_extract_iter_state *iter = mz_zip_reader_extract_iter_new(&zip_archive, 0, 0);
+        REQUIRE(iter != nullptr);
+        std::vector<unsigned char> iter_data(content_size);
+        size_t iter_ofs = 0;
+        while (iter_ofs < iter_data.size())
+        {
+            size_t chunk = iter_data.size() - iter_ofs;
+            if (chunk > 977)
+                chunk = 977;
+            REQUIRE(mz_zip_reader_extract_iter_read(iter, iter_data.data() + iter_ofs, chunk) == chunk);
+            iter_ofs += chunk;
+        }
+        REQUIRE(mz_zip_reader_extract_iter_free(iter));
+        REQUIRE(memcmp(iter_data.data(), k_lzma_content, content_size) == 0);
+
+        /* Whole-archive validation (extracts and verifies CRC-32 internally) */
+        mz_zip_error err = MZ_ZIP_NO_ERROR;
+        REQUIRE(mz_zip_validate_mem_archive(k_lzma_zip, sizeof(k_lzma_zip), 0, &err));
+        REQUIRE(err == MZ_ZIP_NO_ERROR);
+
+        mz_zip_reader_end(&zip_archive);
+    }
+
+#ifndef MINIZ_NO_STDIO
+    SECTION("LZMA entries extract correctly from file archives")
+    {
+        const char *zip_filename = "lzma_test_tmp.zip";
+        const char *out_filename = "lzma_test_tmp.bin";
+
+        FILE *f = fopen(zip_filename, "wb");
+        REQUIRE(f);
+        REQUIRE(fwrite(k_lzma_zip, 1, sizeof(k_lzma_zip), f) == sizeof(k_lzma_zip));
+        fclose(f);
+
+        mz_zip_archive zip_archive = {};
+        REQUIRE(mz_zip_reader_init_file(&zip_archive, zip_filename, 0));
+        REQUIRE(mz_zip_reader_extract_to_file(&zip_archive, 0, out_filename, 0));
+        mz_zip_reader_end(&zip_archive);
+
+        std::vector<unsigned char> extracted(content_size);
+        f = fopen(out_filename, "rb");
+        REQUIRE(f);
+        REQUIRE(fread(extracted.data(), 1, content_size, f) == content_size);
+        fclose(f);
+        REQUIRE(memcmp(extracted.data(), k_lzma_content, content_size) == 0);
+
+        unlink(zip_filename);
+        unlink(out_filename);
+    }
+#endif /* MINIZ_NO_STDIO */
+
+    SECTION("LZMA CRC-32 mismatch is detected")
+    {
+        mz_zip_archive zip_archive = {};
+        REQUIRE(mz_zip_reader_init_mem(&zip_archive, k_lzma_zip_badcrc, sizeof(k_lzma_zip_badcrc), 0));
+
+        size_t extracted_size = 0;
+        REQUIRE(mz_zip_reader_extract_to_heap(&zip_archive, 0, &extracted_size, 0) == nullptr);
+        REQUIRE(mz_zip_get_last_error(&zip_archive) == MZ_ZIP_CRC_CHECK_FAILED);
+
+        mz_zip_reader_end(&zip_archive);
+    }
+
+    SECTION("Corrupted LZMA data is detected")
+    {
+        mz_zip_archive zip_archive = {};
+        REQUIRE(mz_zip_reader_init_mem(&zip_archive, k_lzma_zip_corrupt, sizeof(k_lzma_zip_corrupt), 0));
+
+        size_t extracted_size = 0;
+        REQUIRE(mz_zip_reader_extract_to_heap(&zip_archive, 0, &extracted_size, 0) == nullptr);
+        const mz_zip_error err = mz_zip_get_last_error(&zip_archive);
+        REQUIRE(((err == MZ_ZIP_DECOMPRESSION_FAILED) || (err == MZ_ZIP_CRC_CHECK_FAILED) || (err == MZ_ZIP_UNEXPECTED_DECOMPRESSED_SIZE)));
+
+        mz_zip_reader_end(&zip_archive);
+    }
+
+    SECTION("Unsupported LZMA properties subtype gives a distinct error")
+    {
+        mz_zip_archive zip_archive = {};
+        REQUIRE(mz_zip_reader_init_mem(&zip_archive, k_lzma_zip_badprops, sizeof(k_lzma_zip_badprops), 0));
+
+        size_t extracted_size = 0;
+        REQUIRE(mz_zip_reader_extract_to_heap(&zip_archive, 0, &extracted_size, 0) == nullptr);
+        REQUIRE(mz_zip_get_last_error(&zip_archive) == MZ_ZIP_UNSUPPORTED_FEATURE);
+
+        mz_zip_reader_end(&zip_archive);
+    }
+
+    SECTION("Unsupported compression method gives a distinct error")
+    {
+        REQUIRE(MZ_ZIP_UNSUPPORTED_METHOD != MZ_ZIP_UNSUPPORTED_FEATURE);
+
+        mz_zip_archive zip_archive = {};
+        REQUIRE(mz_zip_reader_init_mem(&zip_archive, k_bzip2_zip, sizeof(k_bzip2_zip), 0));
+
+        REQUIRE(!mz_zip_reader_is_file_supported(&zip_archive, 0));
+        REQUIRE(mz_zip_get_last_error(&zip_archive) == MZ_ZIP_UNSUPPORTED_METHOD);
+
+        size_t extracted_size = 0;
+        REQUIRE(mz_zip_reader_extract_to_heap(&zip_archive, 0, &extracted_size, 0) == nullptr);
+        REQUIRE(mz_zip_get_last_error(&zip_archive) == MZ_ZIP_UNSUPPORTED_METHOD);
+
+        mz_zip_reader_end(&zip_archive);
+    }
+}
+#endif /* MINIZ_TEST_HAS_LZMA */
+
 struct iterator_test_allocator
 {
     std::unordered_set<void *> allocations;

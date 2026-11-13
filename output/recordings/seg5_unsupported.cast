@@ -1,0 +1,10 @@
+{"version":3,"term":{"cols":80,"rows":24},"timestamp":1794547855,"idle_time_limit":3.0,"command":"bash output/verify/seg5_unsupported.sh","title":"5/6 Distinguishable unsupported errors","env":{"SHELL":"/bin/bash"}}
+[0.009, "o", "==============================================================\r\n Segment 5/6: Distinguishable error codes for unsupported input\r\n==============================================================\r\n"]
+[1.003, "o", "LZMA entry, unsupported properties subtype -> MZ_ZIP_UNSUPPORTED_FEATURE\r\nbzip2 (method 12) entry                  -> MZ_ZIP_UNSUPPORTED_METHOD\r\n\r\n"]
+[0.000, "o", "+ bin/catch_tests \"Zip reader LZMA tests\" -c \"Unsupported LZMA properties subtype gives a distinct error\" -s\r\n"]
+[0.003, "o", "  REQUIRE( mz_zip_get_last_error(&zip_archive) == MZ_ZIP_UNSUPPORTED_FEATURE )\r\nAll tests passed (3 assertions in 1 test case)\r\n"]
+[0.001, "o", "\r\n+ bin/catch_tests \"Zip reader LZMA tests\" -c \"Unsupported compression method gives a distinct error\" -s\r\n"]
+[0.002, "o", "  REQUIRE( MZ_ZIP_UNSUPPORTED_METHOD != MZ_ZIP_UNSUPPORTED_FEATURE )\r\n  REQUIRE( mz_zip_get_last_error(&zip_archive) == MZ_ZIP_UNSUPPORTED_METHOD )\r\n  REQUIRE( mz_zip_get_last_error(&zip_archive) == MZ_ZIP_UNSUPPORTED_METHOD )\r\nAll tests passed (6 assertions in 1 test case)\r\n"]
+[0.000, "o", "\r\n+ ./miniz_tester r output/verify/bad  (error strings, per archive)\r\n"]
+[0.003, "o", "Error: Failed extracting file from archive \"output/verify/bad/lzma_badcrc.zip\": unexpected decompressed size\r\nError: Failed extracting file from archive \"output/verify/bad/lzma_badprops.zip\": unsupported feature\r\nError: Failed extracting file from archive \"output/verify/bad/lzma_corrupt.zip\": decompression failed or archive is corrupted\r\n"]
+[1.030, "x", "0"]

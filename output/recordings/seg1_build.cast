@@ -1,0 +1,11 @@
+{"version":3,"term":{"cols":80,"rows":24},"timestamp":1794547830,"idle_time_limit":3.0,"command":"bash output/verify/seg1_build.sh","title":"1/6 Build (repo entry points)","env":{"SHELL":"/bin/bash"}}
+[0.007, "o", "================================================================\r\n Segment 1/6: Build (amalgamate.sh + miniz_tester + catch_tests)\r\n================================================================\r\n"]
+[1.003, "o", "+ create miniz_export.h (same as test.sh)\r\n"]
+[0.000, "o", "+ SKIPTESTS=1 bash amalgamate.sh\r\n"]
+[0.236, "o", "amalgamate.sh: line 43: zip: command not found\r\n"]
+[0.000, "o", "+ g++ tests/miniz_tester.cpp tests/timer.cpp amalgamation/miniz.c -o miniz_tester\r\n"]
+[2.630, "o", "+ gcc examples/exampleN.c (1..6)\r\n"]
+[1.990, "o", "+ cmake --build /tmp/miniz-build --target catch_tests\r\n"]
+[3.512, "o", "gmake[1]: Leaving directory '/tmp/miniz-build'\r\n"]
+[0.000, "o", "build OK\r\n"]
+[1.010, "x", "0"]
