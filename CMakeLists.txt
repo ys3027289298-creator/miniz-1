@@ -108,6 +108,8 @@ if(AMALGAMATE_SOURCES)
     target_include_directories(${PROJECT_NAME} PUBLIC
       $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/amalgamation>
     )
+    # The zip reader dlopen()s libzstd at runtime to decompress zstd entries.
+    target_link_libraries(${PROJECT_NAME} ${CMAKE_DL_LIBS})
   endif(BUILD_HEADER_ONLY)
 
   set(INSTALL_HEADERS ${CMAKE_CURRENT_BINARY_DIR}/amalgamation/miniz.h)
@@ -141,6 +143,9 @@ else(AMALGAMATE_SOURCES)
   set(miniz_SOURCE miniz.c miniz_zip.c miniz_tinfl.c miniz_tdef.c)
   add_library(${PROJECT_NAME} ${miniz_SOURCE})
   generate_export_header(${PROJECT_NAME})
+
+  # The zip reader dlopen()s libzstd at runtime to decompress zstd entries.
+  target_link_libraries(${PROJECT_NAME} ${CMAKE_DL_LIBS})
 
   if(NOT BUILD_SHARED_LIBS)
     string(TOUPPER ${PROJECT_NAME} PROJECT_UPPER)
@@ -365,4 +370,3 @@ set(INCLUDE_INSTALL_DIR "include")
 if(INSTALL_PROJECT)
   install(FILES ${INSTALL_HEADERS} DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME})
 endif()
-

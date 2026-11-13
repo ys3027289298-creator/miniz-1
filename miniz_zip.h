@@ -200,6 +200,9 @@ extern "C"
 
         tinfl_decompressor inflator;
 
+        /* Opaque Zstandard decoder context (MZ_ZSTD entries only, NULL otherwise). */
+        void *pZstd_dctx;
+
 #ifdef MINIZ_DISABLE_ZIP_READER_CRC32_CHECKS
         mz_uint padding;
 #else

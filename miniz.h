@@ -265,6 +265,7 @@ extern "C"
 
 /* Method */
 #define MZ_DEFLATED 8
+#define MZ_ZSTD 93
 
     /* Heap allocation callbacks.
     Note that mz_alloc_func parameter types purposely differ from zlib's: items/size is size_t, not unsigned long. */

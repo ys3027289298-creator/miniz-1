@@ -1,0 +1,58 @@
+
+########## 段 1: 改动概览 (读侧小改数处, 写侧不动) ##########
+ CMakeLists.txt |   6 +-
+ miniz.h        |   1 +
+ miniz_zip.c    | 350 ++++++++++++++++++++++++++++++++++++++++++++++++++++++---
+ miniz_zip.h    |   3 +
+ 4 files changed, 346 insertions(+), 14 deletions(-)
+
+########## 段 2: 构建 (仓库自带 cmake 入口) ##########
+gmake[1]: Leaving directory '/home/ys/feedback/uidreczz28Z0d8oVSjR/build'
+/usr/bin/cmake -E cmake_progress_start /home/ys/feedback/uidreczz28Z0d8oVSjR/build/CMakeFiles 0
+
+########## 段 3: 生成小体积 zstd 测试素材 (output/) ##########
+small: uncomp=9100 comp=235
+big:   uncomp=33554432 comp=583308
+-rw-r--r-- 1 ys ys 583420 Nov 13 12:57 output/zstd_big.zip
+-rw-r--r-- 1 ys ys    351 Nov 13 12:57 output/zstd_corrupt.zip
+-rw-r--r-- 1 ys ys    200 Nov 13 12:56 output/zstd_cut.zip
+-rw-r--r-- 1 ys ys    351 Nov 13 12:57 output/zstd_small.zip
+-rw-r--r-- 1 ys ys    257 Nov 13 12:57 output/zstd_trunc.zip
+
+########## 段 4: 正确性: 三条读取路径解压校验 (heap / callback / iter) ##########
+entry='hello.txt' method=93 comp=235 uncomp=9100 supported=1
+peak_rss=2252 KB
+OK
+entry='hello.txt' method=93 comp=235 uncomp=9100 supported=1
+peak_rss=2252 KB
+OK
+entry='hello.txt' method=93 comp=235 uncomp=9100 supported=1
+peak_rss=2252 KB
+OK
+
+########## 段 5: 内存受控: 32MiB 条目流式解压 (归档仅 ~583KB) ##########
+-rw-r--r-- 1 ys ys 583420 Nov 13 12:57 output/zstd_big.zip
+entry='big.bin' method=93 comp=583308 uncomp=33554432 supported=1
+OK
+	Maximum resident set size (kbytes): 4684
+entry='big.bin' method=93 comp=583308 uncomp=33554432 supported=1
+OK
+	Maximum resident set size (kbytes): 4684
+
+########## 段 6: 错误输入拒绝: 帧损坏 / 帧截断 / 整包截断 ##########
+entry='hello.txt' method=93 comp=235 uncomp=9100 supported=1
+  extract_to_heap failed: error=11 (decompression failed or archive is corrupted)
+peak_rss=2252 KB
+REJECTED as expected
+entry='hello.txt' method=93 comp=141 uncomp=9100 supported=1
+  extract_to_callback failed: error=11 (decompression failed or archive is corrupted)
+peak_rss=2124 KB
+REJECTED as expected
+  reader_init failed: error=7 (failed finding central directory)
+REJECTED as expected
+
+########## 段 7: 写侧回归: 仓库自带 example2 与 catch 测试套件 ##########
+Success.
+All tests passed (131389 assertions in 8 test cases)
+
+全部检查完成

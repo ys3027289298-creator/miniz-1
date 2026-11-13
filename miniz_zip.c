@@ -1206,6 +1206,237 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
 
 #endif /* MINIZ_NO_STDIO */
 
+    /* ------------------- Zstandard (method 93) read-side support ------------------- */
+    /* The zstd decoder is loaded dynamically at runtime, so miniz does not gain a
+       build-time dependency on libzstd and the writer side is completely unaffected.
+       If the library cannot be loaded, extracting MZ_ZSTD entries fails with
+       MZ_ZIP_UNSUPPORTED_METHOD. Decompression streams through fixed-size buffers,
+       so memory usage stays bounded regardless of the compressed entry size.
+       Define MINIZ_NO_ZSTD to disable this support entirely. */
+
+#ifndef MINIZ_NO_ZSTD
+#define MZ_ZIP_ZSTD_ENABLED 1
+#endif
+
+#ifdef MZ_ZIP_ZSTD_ENABLED
+#define MZ_ZIP_METHOD_IS_SUPPORTED(method) (((method) == 0) || ((method) == MZ_DEFLATED) || ((method) == MZ_ZSTD))
+#else
+#define MZ_ZIP_METHOD_IS_SUPPORTED(method) (((method) == 0) || ((method) == MZ_DEFLATED))
+#endif
+
+#ifdef MZ_ZIP_ZSTD_ENABLED
+
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+
+    /* Minimal libzstd decoder ABI (see zstd.h), resolved at runtime. */
+    typedef struct mz_zstd_dctx_s mz_zstd_dctx;
+    typedef struct
+    {
+        const void *src;
+        size_t size;
+        size_t pos;
+    } mz_zstd_in_buffer;
+    typedef struct
+    {
+        void *dst;
+        size_t size;
+        size_t pos;
+    } mz_zstd_out_buffer;
+
+    typedef mz_zstd_dctx *(*mz_zstd_create_dctx_func)(void);
+    typedef size_t (*mz_zstd_free_dctx_func)(mz_zstd_dctx *dctx);
+    typedef size_t (*mz_zstd_decompress_stream_func)(mz_zstd_dctx *dctx, mz_zstd_out_buffer *output, mz_zstd_in_buffer *input);
+    typedef unsigned int (*mz_zstd_is_error_func)(size_t code);
+
+    static mz_zstd_create_dctx_func mz_zstd_create_dctx_ptr;
+    static mz_zstd_free_dctx_func mz_zstd_free_dctx_ptr;
+    static mz_zstd_decompress_stream_func mz_zstd_decompress_stream_ptr;
+    static mz_zstd_is_error_func mz_zstd_is_error_ptr;
+    static int s_zstd_load_state; /* 0 = not tried yet, 1 = available, -1 = unavailable */
+
+#if defined(_WIN32)
+#define MZ_ZSTD_LOAD_SYM(handle, ptr, sym) *(FARPROC *)(&(ptr)) = GetProcAddress((handle), (sym))
+#else
+#define MZ_ZSTD_LOAD_SYM(handle, ptr, sym) *(void **)(&(ptr)) = dlsym((handle), (sym))
+#endif
+
+    static mz_bool mz_zip_zstd_load(void)
+    {
+        if (s_zstd_load_state)
+            return (s_zstd_load_state > 0) ? MZ_TRUE : MZ_FALSE;
+
+#if defined(_WIN32)
+        {
+            HMODULE h = LoadLibraryA("libzstd.dll");
+            if (!h)
+                h = LoadLibraryA("zstd.dll");
+            if (h)
+            {
+                MZ_ZSTD_LOAD_SYM(h, mz_zstd_create_dctx_ptr, "ZSTD_createDCtx");
+                MZ_ZSTD_LOAD_SYM(h, mz_zstd_free_dctx_ptr, "ZSTD_freeDCtx");
+                MZ_ZSTD_LOAD_SYM(h, mz_zstd_decompress_stream_ptr, "ZSTD_decompressStream");
+                MZ_ZSTD_LOAD_SYM(h, mz_zstd_is_error_ptr, "ZSTD_isError");
+            }
+        }
+#else
+        {
+            void *h = dlopen("libzstd.so.1", RTLD_LAZY | RTLD_LOCAL);
+            if (!h)
+                h = dlopen("libzstd.so", RTLD_LAZY | RTLD_LOCAL);
+            if (h)
+            {
+                MZ_ZSTD_LOAD_SYM(h, mz_zstd_create_dctx_ptr, "ZSTD_createDCtx");
+                MZ_ZSTD_LOAD_SYM(h, mz_zstd_free_dctx_ptr, "ZSTD_freeDCtx");
+                MZ_ZSTD_LOAD_SYM(h, mz_zstd_decompress_stream_ptr, "ZSTD_decompressStream");
+                MZ_ZSTD_LOAD_SYM(h, mz_zstd_is_error_ptr, "ZSTD_isError");
+            }
+        }
+#endif
+
+        s_zstd_load_state = (mz_zstd_create_dctx_ptr && mz_zstd_free_dctx_ptr && mz_zstd_decompress_stream_ptr && mz_zstd_is_error_ptr) ? 1 : -1;
+        return (s_zstd_load_state > 0) ? MZ_TRUE : MZ_FALSE;
+    }
+
+    /* Streams a MZ_ZSTD entry through fixed-size buffers and pushes the decompressed
+       data to pCallback, so memory usage stays bounded no matter how large the
+       compressed entry is. Validates the decompressed size and CRC against the
+       central directory record. Corrupted or truncated data fails with an error. */
+    static mz_bool mz_zip_reader_zstd_extract(mz_zip_archive *pZip, mz_uint64 cur_file_ofs, const mz_zip_archive_file_stat *pFile_stat, mz_file_write_func pCallback, void *pOpaque)
+    {
+        mz_uint8 *pRead_buf = NULL, *pWrite_buf = NULL;
+        mz_zstd_dctx *pDctx = NULL;
+        mz_uint64 comp_remaining = pFile_stat->m_comp_size, out_ofs = 0;
+        mz_zip_error err = MZ_ZIP_NO_ERROR;
+        mz_bool frame_done = MZ_FALSE;
+#ifndef MINIZ_DISABLE_ZIP_READER_CRC32_CHECKS
+        mz_uint32 crc = MZ_CRC32_INIT;
+#endif
+
+        if (!mz_zip_zstd_load())
+            return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_METHOD);
+
+        pRead_buf = (mz_uint8 *)pZip->m_pAlloc(pZip->m_pAlloc_opaque, 1, MZ_ZIP_MAX_IO_BUF_SIZE);
+        pWrite_buf = (mz_uint8 *)pZip->m_pAlloc(pZip->m_pAlloc_opaque, 1, MZ_ZIP_MAX_IO_BUF_SIZE);
+        pDctx = mz_zstd_create_dctx_ptr();
+        if ((!pRead_buf) || (!pWrite_buf) || (!pDctx))
+            err = MZ_ZIP_ALLOC_FAILED;
+
+        while ((err == MZ_ZIP_NO_ERROR) && (!frame_done))
+        {
+            size_t chunk = (size_t)MZ_MIN(comp_remaining, (mz_uint64)MZ_ZIP_MAX_IO_BUF_SIZE);
+            mz_zstd_in_buffer in;
+
+            if (!chunk)
+            {
+                /* Compressed data exhausted before the zstd frame ended: truncated/corrupt entry. */
+                err = MZ_ZIP_DECOMPRESSION_FAILED;
+                break;
+            }
+
+            if (pZip->m_pRead(pZip->m_pIO_opaque, cur_file_ofs, pRead_buf, chunk) != chunk)
+            {
+                err = MZ_ZIP_FILE_READ_FAILED;
+                break;
+            }
+            cur_file_ofs += chunk;
+            comp_remaining -= chunk;
+
+            in.src = pRead_buf;
+            in.size = chunk;
+            in.pos = 0;
+
+            for (;;)
+            {
+                mz_zstd_out_buffer out;
+                size_t zret;
+
+                out.dst = pWrite_buf;
+                out.size = MZ_ZIP_MAX_IO_BUF_SIZE;
+                out.pos = 0;
+
+                zret = mz_zstd_decompress_stream_ptr(pDctx, &out, &in);
+                if (mz_zstd_is_error_ptr(zret))
+                {
+                    err = MZ_ZIP_DECOMPRESSION_FAILED;
+                    break;
+                }
+
+                if (out.pos)
+                {
+                    if (pCallback(pOpaque, out_ofs, pWrite_buf, out.pos) != out.pos)
+                    {
+                        err = MZ_ZIP_WRITE_CALLBACK_FAILED;
+                        break;
+                    }
+#ifndef MINIZ_DISABLE_ZIP_READER_CRC32_CHECKS
+                    crc = (mz_uint32)mz_crc32(crc, pWrite_buf, out.pos);
+#endif
+                    out_ofs += out.pos;
+                    if (out_ofs > pFile_stat->m_uncomp_size)
+                    {
+                        err = MZ_ZIP_DECOMPRESSION_FAILED;
+                        break;
+                    }
+                }
+
+                if (!zret)
+                {
+                    /* Return value 0 signals a fully decoded and flushed frame. */
+                    frame_done = MZ_TRUE;
+                    break;
+                }
+
+                if ((in.pos == in.size) && (out.pos < out.size))
+                    break; /* Decoder needs more input. */
+            }
+        }
+
+        if (pDctx)
+            mz_zstd_free_dctx_ptr(pDctx);
+        if (pRead_buf)
+            pZip->m_pFree(pZip->m_pAlloc_opaque, pRead_buf);
+        if (pWrite_buf)
+            pZip->m_pFree(pZip->m_pAlloc_opaque, pWrite_buf);
+
+        if (err != MZ_ZIP_NO_ERROR)
+            return mz_zip_set_error(pZip, err);
+
+        if (out_ofs != pFile_stat->m_uncomp_size)
+            return mz_zip_set_error(pZip, MZ_ZIP_UNEXPECTED_DECOMPRESSED_SIZE);
+
+#ifndef MINIZ_DISABLE_ZIP_READER_CRC32_CHECKS
+        if (crc != pFile_stat->m_crc32)
+            return mz_zip_set_error(pZip, MZ_ZIP_CRC_CHECK_FAILED);
+#endif
+
+        return MZ_TRUE;
+    }
+
+    /* Callback adapter writing decompressed data into a caller supplied memory buffer. */
+    typedef struct
+    {
+        mz_uint8 *pBuf;
+        size_t buf_size;
+    } mz_zip_zstd_mem_write;
+
+    static size_t mz_zip_zstd_mem_write_callback(void *pOpaque, mz_uint64 file_ofs, const void *pBuf, size_t n)
+    {
+        mz_zip_zstd_mem_write *p = (mz_zip_zstd_mem_write *)pOpaque;
+        if ((file_ofs > p->buf_size) || (n > (p->buf_size - (size_t)file_ofs)))
+            return 0;
+        memcpy(p->pBuf + (size_t)file_ofs, pBuf, n);
+        return n;
+    }
+
+#endif /* MZ_ZIP_ZSTD_ENABLED */
+
     static MZ_FORCEINLINE const mz_uint8 *mz_zip_get_cdh(mz_zip_archive *pZip, mz_uint file_index)
     {
         if ((!pZip) || (!pZip->m_pState) || (file_index >= pZip->m_total_files))
@@ -1242,7 +1473,7 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
         method = MZ_READ_LE16(p + MZ_ZIP_CDH_METHOD_OFS);
         bit_flag = MZ_READ_LE16(p + MZ_ZIP_CDH_BIT_FLAG_OFS);
 
-        if ((method != 0) && (method != MZ_DEFLATED))
+        if (!MZ_ZIP_METHOD_IS_SUPPORTED(method))
         {
             mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_METHOD);
             return MZ_FALSE;
@@ -1585,8 +1816,8 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
         if (file_stat.m_bit_flag & (MZ_ZIP_GENERAL_PURPOSE_BIT_FLAG_IS_ENCRYPTED | MZ_ZIP_GENERAL_PURPOSE_BIT_FLAG_USES_STRONG_ENCRYPTION | MZ_ZIP_GENERAL_PURPOSE_BIT_FLAG_COMPRESSED_PATCH_FLAG))
             return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_ENCRYPTION);
 
-        /* This function only supports decompressing stored and deflate. */
-        if ((!(flags & MZ_ZIP_FLAG_COMPRESSED_DATA)) && (file_stat.m_method != 0) && (file_stat.m_method != MZ_DEFLATED))
+        /* This function only supports decompressing stored, deflate and zstd. */
+        if ((!(flags & MZ_ZIP_FLAG_COMPRESSED_DATA)) && (!MZ_ZIP_METHOD_IS_SUPPORTED(file_stat.m_method)))
             return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_METHOD);
 
         /* Ensure supplied output buffer is large enough. */
@@ -1622,6 +1853,16 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
 
             return MZ_TRUE;
         }
+
+#ifdef MZ_ZIP_ZSTD_ENABLED
+        if (file_stat.m_method == MZ_ZSTD)
+        {
+            mz_zip_zstd_mem_write mem_write;
+            mem_write.pBuf = (mz_uint8 *)pBuf;
+            mem_write.buf_size = buf_size;
+            return mz_zip_reader_zstd_extract(pZip, cur_file_ofs, &file_stat, mz_zip_zstd_mem_write_callback, &mem_write);
+        }
+#endif /* MZ_ZIP_ZSTD_ENABLED */
 
         /* Decompress the file either directly from memory or from a file input buffer. */
         tinfl_init(&inflator);
@@ -1802,8 +2043,8 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
         if (file_stat.m_bit_flag & (MZ_ZIP_GENERAL_PURPOSE_BIT_FLAG_IS_ENCRYPTED | MZ_ZIP_GENERAL_PURPOSE_BIT_FLAG_USES_STRONG_ENCRYPTION | MZ_ZIP_GENERAL_PURPOSE_BIT_FLAG_COMPRESSED_PATCH_FLAG))
             return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_ENCRYPTION);
 
-        /* This function only supports decompressing stored and deflate. */
-        if ((!(flags & MZ_ZIP_FLAG_COMPRESSED_DATA)) && (file_stat.m_method != 0) && (file_stat.m_method != MZ_DEFLATED))
+        /* This function only supports decompressing stored, deflate and zstd. */
+        if ((!(flags & MZ_ZIP_FLAG_COMPRESSED_DATA)) && (!MZ_ZIP_METHOD_IS_SUPPORTED(file_stat.m_method)))
             return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_METHOD);
 
         /* Read and do some minimal validation of the local directory entry (this doesn't crack the zip64 stuff, which we already have from the central dir) */
@@ -1817,6 +2058,11 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
         cur_file_ofs += (mz_uint64)(MZ_ZIP_LOCAL_DIR_HEADER_SIZE) + MZ_READ_LE16(pLocal_header + MZ_ZIP_LDH_FILENAME_LEN_OFS) + MZ_READ_LE16(pLocal_header + MZ_ZIP_LDH_EXTRA_LEN_OFS);
         if ((cur_file_ofs + file_stat.m_comp_size) > pZip->m_archive_size)
             return mz_zip_set_error(pZip, MZ_ZIP_INVALID_HEADER_OR_CORRUPTED);
+
+#ifdef MZ_ZIP_ZSTD_ENABLED
+        if ((!(flags & MZ_ZIP_FLAG_COMPRESSED_DATA)) && (file_stat.m_method == MZ_ZSTD))
+            return mz_zip_reader_zstd_extract(pZip, cur_file_ofs, &file_stat, pCallback, pOpaque);
+#endif /* MZ_ZIP_ZSTD_ENABLED */
 
         /* Decompress the file either directly from memory or from a file input buffer. */
         if (pZip->m_pState->m_pMem)
@@ -2017,8 +2263,8 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
             return NULL;
         }
 
-        /* This function only supports decompressing stored and deflate. */
-        if ((!(flags & MZ_ZIP_FLAG_COMPRESSED_DATA)) && (pState->file_stat.m_method != 0) && (pState->file_stat.m_method != MZ_DEFLATED))
+        /* This function only supports decompressing stored, deflate and zstd. */
+        if ((!(flags & MZ_ZIP_FLAG_COMPRESSED_DATA)) && (!MZ_ZIP_METHOD_IS_SUPPORTED(pState->file_stat.m_method)))
         {
             mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_METHOD);
             pZip->m_pFree(pZip->m_pAlloc_opaque, pState);
@@ -2039,6 +2285,7 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
         pState->pRead_buf = NULL;
         pState->pWrite_buf = NULL;
         pState->out_blk_remain = 0;
+        pState->pZstd_dctx = NULL;
 
         /* Read and parse the local directory entry. */
         pState->cur_file_ofs = pState->file_stat.m_local_header_ofs;
@@ -2095,9 +2342,6 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
 
         if (!((flags & MZ_ZIP_FLAG_COMPRESSED_DATA) || (!pState->file_stat.m_method)))
         {
-            /* Decompression required, init decompressor */
-            tinfl_init(&pState->inflator);
-
             /* Allocate write buffer */
             if (NULL == (pState->pWrite_buf = pZip->m_pAlloc(pZip->m_pAlloc_opaque, 1, TINFL_LZ_DICT_SIZE)))
             {
@@ -2106,6 +2350,36 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
                     pZip->m_pFree(pZip->m_pAlloc_opaque, pState->pRead_buf);
                 pZip->m_pFree(pZip->m_pAlloc_opaque, pState);
                 return NULL;
+            }
+
+#ifdef MZ_ZIP_ZSTD_ENABLED
+            if (pState->file_stat.m_method == MZ_ZSTD)
+            {
+                /* Decompression required, init zstd decoder */
+                if (!mz_zip_zstd_load())
+                    mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_METHOD);
+                else
+                    pState->pZstd_dctx = mz_zstd_create_dctx_ptr();
+
+                if (!pState->pZstd_dctx)
+                {
+                    if (mz_zip_get_last_error(pZip) == MZ_ZIP_NO_ERROR)
+                        mz_zip_set_error(pZip, MZ_ZIP_ALLOC_FAILED);
+                    if (pState->pRead_buf && !pZip->m_pState->m_pMem)
+                        pZip->m_pFree(pZip->m_pAlloc_opaque, pState->pRead_buf);
+                    pZip->m_pFree(pZip->m_pAlloc_opaque, pState->pWrite_buf);
+                    pZip->m_pFree(pZip->m_pAlloc_opaque, pState);
+                    return NULL;
+                }
+
+                /* Distinguish "not started yet" from "frame completed" (TINFL_STATUS_DONE). */
+                pState->status = TINFL_STATUS_NEEDS_MORE_INPUT;
+            }
+            else
+#endif /* MZ_ZIP_ZSTD_ENABLED */
+            {
+                /* Decompression required, init decompressor */
+                tinfl_init(&pState->inflator);
             }
         }
 
@@ -2179,6 +2453,12 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
 
                 if (!pState->out_blk_remain)
                 {
+#ifdef MZ_ZIP_ZSTD_ENABLED
+                    /* A completed zstd frame has no more data to return. */
+                    if ((pState->pZstd_dctx) && (pState->status == TINFL_STATUS_DONE))
+                        break;
+#endif /* MZ_ZIP_ZSTD_ENABLED */
+
                     /* Read more data from file if none available (and reading from file) */
                     if ((!pState->read_buf_avail) && (!pState->pZip->m_pState->m_pMem))
                     {
@@ -2199,12 +2479,52 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
 
                     /* Perform decompression */
                     in_buf_size = (size_t)pState->read_buf_avail;
-                    pState->status = tinfl_decompress(&pState->inflator, (const mz_uint8 *)pState->pRead_buf + pState->read_buf_ofs, &in_buf_size, (mz_uint8 *)pState->pWrite_buf, pWrite_buf_cur, &out_buf_size, pState->comp_remaining ? TINFL_FLAG_HAS_MORE_INPUT : 0);
+#ifdef MZ_ZIP_ZSTD_ENABLED
+                    if (pState->pZstd_dctx)
+                    {
+                        mz_zstd_in_buffer zin;
+                        mz_zstd_out_buffer zout;
+                        size_t zret;
+
+                        zin.src = (const mz_uint8 *)pState->pRead_buf + pState->read_buf_ofs;
+                        zin.size = in_buf_size;
+                        zin.pos = 0;
+                        zout.dst = pWrite_buf_cur;
+                        zout.size = out_buf_size;
+                        zout.pos = 0;
+
+                        zret = mz_zstd_decompress_stream_ptr((mz_zstd_dctx *)pState->pZstd_dctx, &zout, &zin);
+                        if (mz_zstd_is_error_ptr(zret))
+                        {
+                            mz_zip_set_error(pState->pZip, MZ_ZIP_DECOMPRESSION_FAILED);
+                            pState->status = TINFL_STATUS_FAILED;
+                            break;
+                        }
+
+                        in_buf_size = zin.pos;
+                        out_buf_size = zout.pos;
+                        pState->status = (zret == 0) ? TINFL_STATUS_DONE : TINFL_STATUS_NEEDS_MORE_INPUT;
+                    }
+                    else
+#endif /* MZ_ZIP_ZSTD_ENABLED */
+                    {
+                        pState->status = tinfl_decompress(&pState->inflator, (const mz_uint8 *)pState->pRead_buf + pState->read_buf_ofs, &in_buf_size, (mz_uint8 *)pState->pWrite_buf, pWrite_buf_cur, &out_buf_size, pState->comp_remaining ? TINFL_FLAG_HAS_MORE_INPUT : 0);
+                    }
                     pState->read_buf_avail -= in_buf_size;
                     pState->read_buf_ofs += in_buf_size;
 
                     /* Update current output block size remaining */
                     pState->out_blk_remain = out_buf_size;
+
+#ifdef MZ_ZIP_ZSTD_ENABLED
+                    if ((pState->pZstd_dctx) && (pState->status != TINFL_STATUS_DONE) && (!out_buf_size) && (!pState->read_buf_avail) && ((!pState->comp_remaining) || (pState->pZip->m_pState->m_pMem)))
+                    {
+                        /* Truncated zstd frame: decoder stalled with no more input available. */
+                        mz_zip_set_error(pState->pZip, MZ_ZIP_DECOMPRESSION_FAILED);
+                        pState->status = TINFL_STATUS_FAILED;
+                        break;
+                    }
+#endif /* MZ_ZIP_ZSTD_ENABLED */
                 }
 
                 if (pState->out_blk_remain)
@@ -2272,6 +2592,10 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
             pState->pZip->m_pFree(pState->pZip->m_pAlloc_opaque, pState->pRead_buf);
         if (pState->pWrite_buf)
             pState->pZip->m_pFree(pState->pZip->m_pAlloc_opaque, pState->pWrite_buf);
+#ifdef MZ_ZIP_ZSTD_ENABLED
+        if (pState->pZstd_dctx)
+            mz_zstd_free_dctx_ptr((mz_zstd_dctx *)pState->pZstd_dctx);
+#endif /* MZ_ZIP_ZSTD_ENABLED */
 
         /* Save status */
         status = pState->status;
@@ -2404,8 +2728,8 @@ static int mz_stat64(const char *path, struct __stat64 *buffer)
         if (file_stat.m_is_encrypted)
             return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_ENCRYPTION);
 
-        /* This function only supports stored and deflate. */
-        if ((file_stat.m_method != 0) && (file_stat.m_method != MZ_DEFLATED))
+        /* This function only supports stored, deflate and zstd. */
+        if (!MZ_ZIP_METHOD_IS_SUPPORTED(file_stat.m_method))
             return mz_zip_set_error(pZip, MZ_ZIP_UNSUPPORTED_METHOD);
 
         if (!file_stat.m_is_supported)
